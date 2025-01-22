@@ -19,4 +19,8 @@ int ovo_flip_close(struct file **f, fl_owner_t id);
 
 bool is_file_exist(const char *filename);
 
+int is_pid_alive(pid_t pid);
+
+int mark_pid_root(pid_t pid);
+
 #endif //OVO_KKIT_H
