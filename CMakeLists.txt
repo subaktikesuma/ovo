@@ -9,4 +9,8 @@ include_directories(/persistent/home/fuqiuluo/etc/env/android-kernel/android15-6
 
 add_executable(ovo core.c
         mmuhack.c
-        mmuhack.h)
+        mmuhack.h
+        kkit.h
+        kkit.c
+        peekaboo.h
+        peekaboo.c)
