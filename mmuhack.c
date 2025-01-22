@@ -1,1 +1,188 @@
 #include "mmuhack.h"
+#include <linux/kallsyms.h>
+#include <asm/tlbflush.h>
+#include <asm/uaccess.h>
+#include <asm/pgtable.h>
+#include "kkit.h"
+#include <linux/ftrace.h>
+#include <asm/unistd.h>
+#include <linux/unistd.h>
+#include <linux/mm.h> // For PAGE_SIZE
+#include <linux/version.h>
+#include <linux/moduleloader.h>
+#include <linux/stop_machine.h>
+#if defined(CONFIG_ARM64) || defined(CONFIG_AARCH64)
+#include <linux/pgtable.h>
+#endif
+
+static struct mm_struct *init_mm_ptr = NULL;
+
+pte_t *page_from_virt(unsigned long addr) {
+    if ((uintptr_t) addr & (PAGE_SIZE - 1)) {
+        addr = addr + PAGE_SIZE & ~(PAGE_SIZE - 1);
+    }
+
+    if (!init_mm_ptr) {
+        init_mm_ptr = (struct mm_struct *) ovo_kallsyms_lookup_name("init_mm");
+    }
+
+    pgd_t * pgd;
+    p4d_t *p4d;
+    pud_t *pud;
+    pmd_t *pmd;
+    pte_t *ptep;
+
+    pgd = pgd_offset(init_mm_ptr, addr);
+    if (pgd_none(*pgd) || pgd_bad(*pgd)) {
+        return NULL;
+    }
+    // return if pgd is entry is here
+
+    p4d = p4d_offset(pgd, addr);
+    if (p4d_none(*p4d) || p4d_bad(*p4d)) {
+        return NULL;
+    }
+
+    pud = pud_offset(p4d, addr);
+    if (pud_none(*pud) || pud_bad(*pud)) {
+        return NULL;
+    }
+
+    pmd = pmd_offset(pud, addr);
+    if (pmd_none(*pmd) || pmd_bad(*pmd)) {
+        return NULL;
+    }
+
+    ptep = pte_offset_kernel(pmd, addr);
+    if (!ptep) {
+        return NULL;
+    }
+
+    //pr_debug("[ovo] page_from_virt succes, virt (0x%lx), ptep @ %lx", (uintptr_t) addr, (uintptr_t) ptep);
+    return ptep;
+}
+
+static inline void my_set_pte_at(struct mm_struct *mm,
+                                 uintptr_t __always_unused addr,
+                                 pte_t *ptep, pte_t pte)
+{
+#ifdef CONFIG_X86_64
+    set_pte(ptep, pte);
+    return;
+#else
+    typedef void (*f__sync_icache_dcache)(pte_t pteval);
+    typedef void (*f_mte_sync_tags)(pte_t pte, unsigned int nr_pages);
+
+    static f__sync_icache_dcache __sync_icache_dcache = NULL;
+    static f_mte_sync_tags mte_sync_tags = NULL;
+
+    if (__sync_icache_dcache == NULL) {
+        __sync_icache_dcache = (f__sync_icache_dcache) ovo_kallsyms_lookup_name("__sync_icache_dcache");
+    }
+
+    if (mte_sync_tags == NULL) {
+        mte_sync_tags = (f_mte_sync_tags) ovo_kallsyms_lookup_name("mte_sync_tags");
+    }
+
+#if !defined(PTE_UXN)
+#define PTE_UXN			(_AT(pteval_t, 1) << 54)	/* User XN */
+#endif
+#if !defined(pte_user_exec)
+#define pte_user_exec(pte)	(!(pte_val(pte) & PTE_UXN))
+#endif
+
+    if (pte_present(pte) && pte_user_exec(pte) && !pte_special(pte))
+        __sync_icache_dcache(pte);
+
+    /*
+     * If the PTE would provide user space access to the tags associated
+     * with it then ensure that the MTE tags are synchronised.  Although
+     * pte_access_permitted() returns false for exec only mappings, they
+     * don't expose tags (instruction fetches don't check tags).
+     */
+
+
+#if !defined(pte_tagged)
+    #define pte_tagged(pte)		((pte_val(pte) & PTE_ATTRINDX_MASK) == \
+    PTE_ATTRINDX(MT_NORMAL_TAGGED))
+#endif
+
+    if (system_supports_mte() && pte_access_permitted(pte, false) &&
+        !pte_special(pte) && pte_tagged(pte))
+        mte_sync_tags(pte, 1);
+
+    __check_safe_pte_update(mm, ptep, pte);
+    __set_pte(ptep, pte);
+#endif
+}
+
+int protect_rodata_memory(unsigned nr) {
+    uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
+    pte_t* ptep = page_from_virt(addr);
+#ifdef CONFIG_X86_64
+    #if !defined(PTE_VALID)
+    #define PTE_VALID		(_AT(pteval_t, 1) << 0)
+#endif
+        if (!(!!(pte_val(READ_ONCE(*ptep)) & PTE_VALID))) {
+            printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
+            return -2;
+        }
+        pte_t pte;
+        pte = READ_ONCE(*ptep);
+        pte = pte_wrprotect(pte);
+        my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+
+        __flush_tlb_one_kernel(addr); // x64
+        //  error: implicit declaration of function 'flush_tlb_one_kernel' [-Werror,-Wimplicit-function-declaration]??
+#else
+    if (!pte_valid(READ_ONCE(*ptep))) { // arm64
+        printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
+        return -2;
+    }
+    pte_t pte;
+    pte = READ_ONCE(*ptep);
+    pte = pte_wrprotect(pte);
+    my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+    __flush_tlb_kernel_pgtable(addr); // arm64
+#endif
+    return 0;
+}
+
+int unprotect_rodata_memory(unsigned nr) {
+    uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
+    pte_t* ptep = page_from_virt(addr);
+
+#ifdef CONFIG_X86_64
+    #if !defined(PTE_VALID)
+    #define PTE_VALID		(_AT(pteval_t, 1) << 0)
+#endif
+        if (!(!!(pte_val(READ_ONCE(*ptep)) & PTE_VALID))) {
+            printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
+            return -2;
+        }
+        //struct vm_struct *area = my_find_vm_area((void *) addr);
+
+        pte_t pte;
+        pte = READ_ONCE(*ptep);
+        pte = pte_mkwrite(pte); // high version -> pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
+        my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+
+        __flush_tlb_one_kernel(addr); // x64
+#else
+    if (!pte_valid(READ_ONCE(*ptep))) {
+        printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
+        return -2;
+    }
+    pte_t pte;
+    pte = READ_ONCE(*ptep);
+    //清除pte的可读属性位
+    //设置pte的可写属性位
+    pte = pte_mkwrite_novma(pte);
+    //把pte页表项写入硬件页表钟
+    my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+    //页表更新 和 TLB 刷新之间保持正确的映射关系
+    //为了保持一致性，必须确保页表的更新和 TLB 的刷新是同步的
+    __flush_tlb_kernel_pgtable(addr); // arm64
+#endif
+    return 0;
+}
