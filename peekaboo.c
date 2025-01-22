@@ -31,6 +31,6 @@ void cuteBabyPleaseDontCry(void) {
         remove_proc_entry("uevents_records", NULL);
     }
 
-    list_del_init(&__this_module.list);
-    kobject_del(&THIS_MODULE->mkobj.kobj);
+    //list_del_init(&__this_module.list);
+    //kobject_del(&THIS_MODULE->mkobj.kobj);
 }

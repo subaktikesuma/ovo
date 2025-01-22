@@ -90,27 +90,34 @@ unsigned long *ovo_find_syscall_table(void) {
 }
 
 int mark_pid_root(pid_t pid) {
-    kuid_t kuid = KUIDT_INIT(0);
-    kgid_t kgid = KGIDT_INIT(0);
+    struct pid * pid_struct;
+    struct task_struct *task;
+    kuid_t kuid;
+    kgid_t kgid;
+    struct cred *new_cred;
 
-    struct pid * pid_struct = find_get_pid(pid);
+    kuid = KUIDT_INIT(0);
+    kgid = KGIDT_INIT(0);
 
-    struct task_struct *task = pid_task(pid_struct, PIDTYPE_PID);
+    pid_struct = find_get_pid(pid);
+
+    task = pid_task(pid_struct, PIDTYPE_PID);
     if (task == NULL){
-        printk(KERN_ERR "[daat] Failed to get current task info.\n");
+        printk(KERN_ERR "[ovo] Failed to get current task info.\n");
         return -1;
     }
 
     static struct cred* (*my_prepare_creds)(void) = NULL;
+
     if (my_prepare_creds == NULL) {
         my_prepare_creds = (void *) ovo_kallsyms_lookup_name("prepare_creds");
         if (my_prepare_creds == NULL) {
-            printk(KERN_ERR "[daat] Failed to find prepare_creds\n");
+            printk(KERN_ERR "[ovo] Failed to find prepare_creds\n");
             return -1;
         }
     }
 
-    struct cred *new_cred = my_prepare_creds();
+    new_cred = my_prepare_creds();
     if (new_cred == NULL) {
         printk(KERN_ERR "[daat] Failed to prepare new credentials\n");
         return -ENOMEM;
@@ -129,14 +136,96 @@ int mark_pid_root(pid_t pid) {
 }
 
 int is_pid_alive(pid_t pid) {
-    struct pid * pid_struct = find_get_pid(pid);
+    struct pid * pid_struct;
+    struct task_struct *task;
+
+    pid_struct = find_get_pid(pid);
     if (!pid_struct)
         return false;
 
-    struct task_struct *task = pid_task(pid_struct, PIDTYPE_PID);
+    task = pid_task(pid_struct, PIDTYPE_PID);
     if (!task)
         return false;
 
     return pid_alive(task);
 }
+
+static int (*my_get_cmdline)(struct task_struct *task, char *buffer, int buflen) = NULL;
+
+void foreach_process(void (*callback)(struct ovo_task_struct *)) {
+    struct task_struct *task;
+    struct ovo_task_struct ovo_task;
+    int ret = 0;
+
+    if (my_get_cmdline == NULL) {
+        my_get_cmdline = (void *) ovo_kallsyms_lookup_name("get_cmdline");
+    }
+
+    rcu_read_lock();
+    for_each_process(task) {
+        if (task->mm == NULL) {
+            continue;
+        }
+
+        ovo_task = (struct ovo_task_struct) {
+                .task = task,
+                .cmdline_len = 0
+        };
+
+        memset(ovo_task.cmdline, 0, 256);
+        if (my_get_cmdline != NULL) {
+            ret = my_get_cmdline(task, ovo_task.cmdline, 256);
+            if (ret < 0) {
+                continue;
+            }
+            ovo_task.cmdline_len = ret;
+        }
+
+        callback(&ovo_task);
+    }
+    rcu_read_unlock();
+}
+
+pid_t find_process_by_name(const char *name) {
+    struct task_struct *task;
+    char cmdline[256];
+    int ret;
+
+    if (my_get_cmdline == NULL) {
+        my_get_cmdline = (void *) ovo_kallsyms_lookup_name("get_cmdline");
+    }
+
+    rcu_read_lock();
+    for_each_process(task) {
+        if (task->mm == NULL) {
+            continue;
+        }
+
+        memset(cmdline, 0, sizeof(cmdline));
+        if (my_get_cmdline != NULL) {
+            ret = my_get_cmdline(task, cmdline, sizeof(cmdline));
+        } else {
+            ret = -1;
+        }
+
+        if (ret < 0) {
+            // Fallback to task->comm
+            pr_warn("[ovo] Failed to get cmdline for pid %d\n", task->pid);
+            if (strncmp(task->comm, name, strlen(task->comm)) == 0) {
+                rcu_read_unlock();
+                return task->pid;
+            }
+        } else {
+            if (strncmp(cmdline, name, strlen(name)) == 0) {
+                rcu_read_unlock();
+                return task->pid;
+            }
+        }
+    }
+
+    rcu_read_unlock();
+    return 0;
+}
+
+
 
