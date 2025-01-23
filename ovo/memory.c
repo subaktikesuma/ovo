@@ -15,6 +15,11 @@
 #include <linux/pgtable.h>
 #include <linux/vmalloc.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/mm.h>
+#include <linux/sched/task.h>
+#endif
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0))
 #include <linux/mmap_lock.h>
 #define MM_READ_LOCK(mm) mmap_read_lock(mm);

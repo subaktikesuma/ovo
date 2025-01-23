@@ -80,6 +80,20 @@ pte_t *page_from_virt_kernel(unsigned long addr) {
     return ptep;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) && defined(OVO_0X202501232117)
+pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
+    pte_t *pte;
+    spinlock_t *ptlp;
+
+    if (!mm) return NULL;
+
+    follow_pte(mm, addr, &pte, &ptlp);
+
+    //pte_unmap_unlock(pte, ptlp);
+
+    return pte;
+}
+#else
 pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
     pgd_t * pgd;
 #if __PAGETABLE_P4D_FOLDED == 1
@@ -136,13 +150,9 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
     }
 
     ret:
-//    if (!pte_present(*ptep)) {
-//        return NULL;
-//    }
-
     return ptep;
 }
-
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
 static inline void my_set_pte_at(struct mm_struct *mm,
