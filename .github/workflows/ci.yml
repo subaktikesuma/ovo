@@ -1,25 +1,12 @@
 name: GKI Kernel Module Build
 
 on:
-  push:
-    branches: ["master"]
-    paths:
-      - ".github/workflows/ci.yml"
-      - "ovo/**"
-  
-  pull_request:
-    branches: ["master"]
-    paths:
-      - ".github/workflows/ci.yml"
-      - "ovo/**"
-
   workflow_dispatch:
 
 jobs:
   build:
     name: GKI Kernel Module Build
     runs-on: ubuntu-latest
-    needs: upload-artifact
     strategy:
       fail-fast: false
       matrix:
@@ -56,4 +43,3 @@ jobs:
           tag: ${{ matrix.tag }}
           module-name: ovo
           module-path: ovo
-          
