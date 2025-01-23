@@ -28,3 +28,7 @@
 
 从网上找到的一些内核模块的读写方法，是基于遍历页表什么的然后映射物理地址实现的，修修补补改了改。
 后面用上了`access_process_vm`，这个是内核提供的，可以直接读写进程内存。
+
+# CI Support
+
+- [android-kernel-build-action](https://github.com/feicong/android-kernel-build-action/tree/main)

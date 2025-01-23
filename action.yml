@@ -1,0 +1,190 @@
+name: 'GKI Kernel Module Build Action'
+description: 'An action to build Android GKI kernel modules.'
+
+branding:
+  icon: 'activity'
+  color: 'blue'
+
+inputs:
+  tag:
+    description: 'Specify the Android kernel version and tag to build for (e.g., android13-5.15).'
+    default: 'android13-5.15'
+    required: true
+  arch:
+    description: 'Specify the architecture to build for (e.g., aarch64 or x86_64).'
+    required: true
+    default: 'aarch64'
+  module-path:
+    description: 'Specify the name of the kernel module artifact.'
+    required: true
+  module-name:
+    description: 'Specify the name of the kernel module.'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download LKM Source Code
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.module-path }}
+        path: ${{ inputs.module-name }}
+
+    - name: Validate Input
+      shell: bash
+      run: |
+        VALID_TAGS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12")
+        if [[ ! " ${VALID_TAGS[@]} " =~ " ${{ inputs.tag }} " ]]; then
+          echo "Invalid tag specified: ${{ inputs.tag }}. Must be one of: ${VALID_TAGS[@]}"
+          exit 1
+        fi
+        if [ ! -d "${{ inputs.module-name }}" ]; then
+          echo "Invalid module-name: Directory ${{ inputs.module-name }} does not exist."
+          exit 2
+        fi
+        tree -f .
+        if [ ! -f "${{ inputs.module-name }}/Makefile" ]; then
+          echo "${{ inputs.module-name }}/Makefile does not exist."
+          exit 3
+        fi
+        if [ ! -f "${{ inputs.module-name }}/${{ inputs.module-name }}.c" ]; then
+          echo "Error: ${inputs.module-name}/${inputs.module-name}.c does not exist."
+          exit 4
+        fi
+
+    - name: Install Build Tools
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: binutils git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libx11-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python3 libelf-dev binutils-aarch64-linux-gnu gcc gzip
+        version: 1.0
+
+    - name: Setup Android Kernel Source Code
+      shell: bash
+      run: |
+        sudo apt-get install -y repo
+        mkdir android-kernel && cd android-kernel
+        repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ inputs.tag }} --repo-rev=v2.16
+        repo sync -c -j$(nproc) --no-tags
+        df -h
+
+    - name: Setup CCache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache-${{ inputs.tag }}
+        key: gki-kernel-${{ inputs.tag }}-cache
+        max-size: 2G
+
+    - name: Setup Kernel Module
+      shell: bash
+      run: |
+        tree -f ${{ inputs.module-name }}
+
+        echo "[+] Kernel Module setup"
+        GKI_ROOT=$GITHUB_WORKSPACE/android-kernel
+        echo "[+] GKI_ROOT: $GKI_ROOT"
+        echo "[+] Copy driver to $GKI_ROOT/common/drivers"
+        mv ${{ inputs.module-name }} $GKI_ROOT/common/drivers/${{ inputs.module-name }}
+        
+        echo "[+] Add driver to Makefile"
+        DRIVER_MAKEFILE=$GKI_ROOT/common/drivers/Makefile
+        DRIVER_KCONFIG=$GKI_ROOT/common/drivers/Kconfig
+        grep -q "${{ inputs.module-name }}" "$DRIVER_MAKEFILE" || printf "\nobj-m += ${{ inputs.module-name }}/\n" >> "$DRIVER_MAKEFILE"
+        if [ -f $GITHUB_WORKSPACE/${{ inputs.module-name }}/Kconfig ]; then
+          grep -q "${{ inputs.module-name }}" "$DRIVER_KCONFIG" || sed -i "/endmenu/i\\source \"drivers/${{ inputs.module-name }}/Kconfig\"" "$DRIVER_KCONFIG"
+        fi
+        # Ensure module Makefile exists
+        if [ ! -f $GKI_ROOT/common/drivers/${{ inputs.module-name }}/Makefile ]; then
+          echo "obj-m += ${{ inputs.module-name }}.o" > $GKI_ROOT/common/drivers/${{ inputs.module-name }}/Makefile
+        fi
+
+    - name: Setup for LKM
+      shell: bash
+      working-directory: android-kernel
+      run: |
+        pip install ast-grep-cli
+        sudo apt-get install llvm-15 -y
+        ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' common/scripts/mod/modpost.c
+        ast-grep -U -p 'check_exports($$$);' -r '' common/scripts/mod/modpost.c
+        if [ -f common/android/gki_aarch64_modules ]; then
+          echo "drivers/${{ inputs.module-name }}/${{ inputs.module-name }}.ko" >> common/android/gki_aarch64_modules
+        fi
+
+        # bazel build, android14-5.15, android14-6.1 use bazel
+        if [ ! -f build/build.sh ]; then
+          sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
+          if [ -f common/modules.bzl ]; then
+            sed -i "s/_COMMON_GKI_MODULES_LIST = \[/_COMMON_GKI_MODULES_LIST = \[ \"drivers\/${{ inputs.module-name }}\/${{ inputs.module-name }}.ko\",/g" common/modules.bzl
+          fi
+        else
+          TARGET_FILE="build/kernel/build.sh"
+          if [ ! -f "$TARGET_FILE" ]; then
+            TARGET_FILE="build/build.sh"
+          fi
+          sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' $TARGET_FILE || echo "No unknown symbol in $TARGET_FILE"
+          sed -i 's/if ! diff -u "\${KERNEL_DIR}\/\${MODULES_ORDER}" "\${OUT_DIR}\/modules\.order"; then/if false; then/g' $TARGET_FILE
+          sed -i 's@\${ROOT_DIR}/build/abi/compare_to_symbol_list@echo@g' $TARGET_FILE
+          sed -i 's/needs unknown symbol/Dont abort when unknown symbol/g' build/kernel/*.sh || echo "No unknown symbol scripts found"
+        fi
+
+    - name: Make working directory clean to avoid dirty
+      shell: bash
+      working-directory: android-kernel
+      run: |
+        repo status
+        rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+        git config --global user.email "bot@github.actions.org"
+        git config --global user.name "github.actions"
+        cd common/ && git add -A && git commit -a -m "Add Kernel Module"
+        repo status
+
+    - name: Build Kernel
+      shell: bash
+      working-directory: android-kernel
+      run: |
+        if [[ "${{ inputs.tag }}" == "android16-6.12" ]]; then
+          if [ "${{ inputs.arch }}" = "aarch64" ]; then
+            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_aarch64_dist
+          elif [ "${{ inputs.arch }}" = "x86_64" ]; then
+            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_x86_64_dist
+          fi
+        else
+          if [ "${{ inputs.arch }}" = "aarch64" ]; then
+            if [ -e build/build.sh ]; then
+              LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+            else
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+            fi
+          elif [ "${{ inputs.arch }}" = "x86_64" ]; then
+            if [ -e build/build.sh ]; then
+              LTO=thin BUILD_CONFIG=common/build.config.gki.x86_64 build/build.sh CC="/usr/bin/ccache clang"
+            else
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_x86_64_dist -- --dist_dir=dist
+            fi
+          fi
+        fi
+
+    - name: Prepare Artifacts
+      shell: bash
+      run: |
+        if [[ "${{ inputs.tag }}" == "android16-6.12" ]]; then
+          if [ "${{ inputs.arch }}" = "aarch64" ]; then
+            OUTDIR=android-kernel/out/kernel_aarch64/dist
+          elif [ "${{ inputs.arch }}" = "x86_64" ]; then
+            OUTDIR=android-kernel/out/kernel_x86_64/dist
+          fi
+        else
+          OUTDIR=android-kernel/out/${{ inputs.tag }}/dist
+          if [ ! -e $OUTDIR ]; then
+            OUTDIR=android-kernel/dist
+          fi
+        fi
+        mkdir output
+        ls -al $OUTDIR/
+        cp $OUTDIR/*Image* ./output/
+        cp $OUTDIR/${{ inputs.module-name }}.ko ./output/${{ inputs.tag }}_${{ inputs.module-name }}.ko
+
+    - name: Upload Kernel Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Image-${{ inputs.tag }}-${{ inputs.arch }}
+        path: ./output/*
