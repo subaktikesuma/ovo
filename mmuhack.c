@@ -17,7 +17,7 @@
 
 static struct mm_struct *init_mm_ptr = NULL;
 
-pte_t *page_from_virt(unsigned long addr) {
+pte_t *page_from_virt_kernel(unsigned long addr) {
     if ((uintptr_t) addr & (PAGE_SIZE - 1)) {
         addr = addr + PAGE_SIZE & ~(PAGE_SIZE - 1);
     }
@@ -27,9 +27,11 @@ pte_t *page_from_virt(unsigned long addr) {
     }
 
     pgd_t * pgd;
+#if __PAGETABLE_P4D_FOLDED == 1
     p4d_t *p4d;
-    pud_t *pud;
-    pmd_t *pmd;
+#endif
+    pud_t *pudp, pud;
+    pmd_t *pmdp, pmd;
     pte_t *ptep;
 
     pgd = pgd_offset(init_mm_ptr, addr);
@@ -38,27 +40,106 @@ pte_t *page_from_virt(unsigned long addr) {
     }
     // return if pgd is entry is here
 
+#if __PAGETABLE_P4D_FOLDED == 1
     p4d = p4d_offset(pgd, addr);
     if (p4d_none(*p4d) || p4d_bad(*p4d)) {
+        return 0;
+    }
+
+    pudp = pud_offset(p4d, addr);
+#else
+    pudp = pud_offset(pgd, addr);
+#endif
+    pud = READ_ONCE(*pudp);
+    if (pud_none(pud) || pud_bad(pud)) {
         return NULL;
     }
 
-    pud = pud_offset(p4d, addr);
-    if (pud_none(*pud) || pud_bad(*pud)) {
+#if defined(pud_leaf)
+    if (pud_leaf(pud))
+        return (pte_t *)pudp;
+#endif
+
+    pmdp = pmd_offset(pudp, addr);
+    pmd = READ_ONCE(*pmdp);
+    if (pmd_none(pmd) || pmd_bad(pmd)) {
         return NULL;
     }
 
-    pmd = pmd_offset(pud, addr);
-    if (pmd_none(*pmd) || pmd_bad(*pmd)) {
-        return NULL;
-    }
+#if defined(pmd_leaf)
+    if (pmd_leaf(pmd))
+        return (pte_t *)pmdp;
+#endif
 
-    ptep = pte_offset_kernel(pmd, addr);
+    ptep = pte_offset_kernel(pmdp, addr);
     if (!ptep) {
         return NULL;
     }
 
     //pr_debug("[ovo] page_from_virt succes, virt (0x%lx), ptep @ %lx", (uintptr_t) addr, (uintptr_t) ptep);
+    return ptep;
+}
+
+pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
+    pgd_t * pgd;
+#if __PAGETABLE_P4D_FOLDED == 1
+    p4d_t *p4d;
+#endif
+    pud_t *pudp, pud;
+    pmd_t *pmdp, pmd;
+    pte_t *ptep;
+
+    pgd = pgd_offset(mm, addr);
+    if (pgd_none(*pgd) || pgd_bad(*pgd)) {
+        return NULL;
+    }
+    // return if pgd is entry is here
+
+#if __PAGETABLE_P4D_FOLDED == 1
+    p4d = p4d_offset(pgd, addr);
+    if (p4d_none(*p4d) || p4d_bad(*p4d)) {
+        return 0;
+    }
+
+    pudp = pud_offset(p4d, addr);
+#else
+    pudp = pud_offset(pgd, addr);
+#endif
+    pud = READ_ONCE(*pudp);
+    if (pud_none(pud) || pud_bad(pud)) {
+        return NULL;
+    }
+
+#if defined(pud_leaf)
+    if (pud_leaf(pud)) {
+        ptep = (pte_t *) pudp;
+        goto ret;
+    }
+#endif
+
+    pmdp = pmd_offset(pudp, addr);
+    pmd = READ_ONCE(*pmdp);
+    if (pmd_none(pmd) || pmd_bad(pmd)) {
+        return NULL;
+    }
+
+#if defined(pmd_leaf)
+    if (pmd_leaf(pmd)) {
+        ptep = (pte_t *) pmdp;
+        goto ret;
+    }
+#endif
+
+    ptep = pte_offset_kernel(pmdp, addr);
+    if (!ptep) {
+        return NULL;
+    }
+
+    ret:
+//    if (!pte_present(*ptep)) {
+//        return NULL;
+//    }
+
     return ptep;
 }
 
@@ -118,7 +199,7 @@ static inline void my_set_pte_at(struct mm_struct *mm,
 
 int protect_rodata_memory(unsigned nr) {
     uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
-    pte_t* ptep = page_from_virt(addr);
+    pte_t* ptep = page_from_virt_kernel(addr);
 #ifdef CONFIG_X86_64
     #if !defined(PTE_VALID)
     #define PTE_VALID		(_AT(pteval_t, 1) << 0)
@@ -150,7 +231,7 @@ int protect_rodata_memory(unsigned nr) {
 
 int unprotect_rodata_memory(unsigned nr) {
     uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
-    pte_t* ptep = page_from_virt(addr);
+    pte_t* ptep = page_from_virt_kernel(addr);
 
 #ifdef CONFIG_X86_64
     #if !defined(PTE_VALID)
@@ -175,14 +256,15 @@ int unprotect_rodata_memory(unsigned nr) {
     }
     pte_t pte;
     pte = READ_ONCE(*ptep);
-    //清除pte的可读属性位
-    //设置pte的可写属性位
+
+    // 如果pte_mkwrite_novma无法使用，换成下面这两行
+    // pte = set_pte_bit(pte, __pgprot(PTE_WRITE));
+    // pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
+
     pte = pte_mkwrite_novma(pte);
-    //把pte页表项写入硬件页表钟
     my_set_pte_at(init_mm_ptr, addr, ptep, pte);
-    //页表更新 和 TLB 刷新之间保持正确的映射关系
-    //为了保持一致性，必须确保页表的更新和 TLB 的刷新是同步的
-    __flush_tlb_kernel_pgtable(addr); // arm64
+    __flush_tlb_kernel_pgtable(addr);
 #endif
     return 0;
 }
+

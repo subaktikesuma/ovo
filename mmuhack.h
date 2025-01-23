@@ -7,7 +7,9 @@
 
 #include <asm/pgtable.h>
 
-pte_t *page_from_virt(unsigned long addr);
+pte_t *page_from_virt_kernel(unsigned long addr);
+
+pte_t *page_from_virt_user(struct mm_struct * mm, unsigned long addr);
 
 int protect_rodata_memory(unsigned nr);
 
