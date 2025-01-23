@@ -118,8 +118,17 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
     pte_t *ptep;
     phys_addr_t page_addr;
     uintptr_t page_offset;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) && defined(OVO_0X202501232139)
+    spinlock_t *ptlp;
+#endif
 
+    if (!mm) return 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) && defined(OVO_0X202501232139)
+    follow_pte(mm, va, &pte, &ptlp); // not export!
+#else
     ptep = page_from_virt_user(mm, va);
+#endif
 
     if (!pte_present(*ptep)) {
         return 0;
@@ -134,6 +143,11 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
 #else
 #error unsupported kernel version：__pte_to_phys or pte_pfn
 #endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) && defined(OVO_0X202501232139)
+    pte_unmap_unlock(pte, ptlp);
+#endif
+
     if (page_addr == 0) { // why?
         return 0;
     }
@@ -278,5 +292,29 @@ int access_process_vm_by_pid(pid_t from, void __user*from_addr, pid_t to, void _
     }
 
     vfree(buf);
+    return 0;
+}
+
+int remap_process_memory(pid_t from, void *from_addr, pid_t to, void *to_addr) {
+/*
+    struct task_struct *task_a, *task_b;
+    struct mm_struct *mm_a, *mm_b;
+    struct vm_area_struct *vma_b;
+
+    rcu_read_lock();
+    task_a = pid_task(find_vpid(from), PIDTYPE_PID);
+    task_b = pid_task(find_vpid(to), PIDTYPE_PID);
+    rcu_read_unlock();
+
+    if (!task_a || !task_a->mm || !task_b || !task_b->mm) {
+        return -1;
+    }
+
+    mm_a = get_task_mm(task_a);
+    mm_b = get_task_mm(task_b);
+
+    
+*/
+
     return 0;
 }

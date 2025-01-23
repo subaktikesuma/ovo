@@ -24,6 +24,9 @@ int write_process_memory(pid_t pid, void __user* addr, void __user* src, size_t 
 // 使用access_process_vm去读写进程内存
 int access_process_vm_by_pid(pid_t from, void __user* from_addr, pid_t to, void __user* to_addr, size_t size);
 
-//int share_memory_to_process_kernel(void __kernel *buf, size_t size, pid_t to);
+// 内存重映射
+// 默认一次性映射一页内存，使用的是vm_insert_page
+int remap_process_memory(pid_t from, void __user* from_addr, pid_t to, void __user* to_addr);
+int unmap_process_memory(pid_t from, void __user* from_addr);
 
 #endif //OVO_MEMORY_H

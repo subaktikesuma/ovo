@@ -159,10 +159,6 @@ static inline void my_set_pte_at(struct mm_struct *mm,
                                  uintptr_t __always_unused addr,
                                  pte_t *ptep, pte_t pte)
 {
-#ifdef CONFIG_X86_64
-    set_pte(ptep, pte);
-    return;
-#else
     typedef void (*f__sync_icache_dcache)(pte_t pteval);
     typedef void (*f_mte_sync_tags)(pte_t pte, unsigned int nr_pages);
 
@@ -180,6 +176,7 @@ static inline void my_set_pte_at(struct mm_struct *mm,
 #if !defined(PTE_UXN)
 #define PTE_UXN			(_AT(pteval_t, 1) << 54)	/* User XN */
 #endif
+
 #if !defined(pte_user_exec)
 #define pte_user_exec(pte)	(!(pte_val(pte) & PTE_UXN))
 #endif
@@ -193,8 +190,6 @@ static inline void my_set_pte_at(struct mm_struct *mm,
      * pte_access_permitted() returns false for exec only mappings, they
      * don't expose tags (instruction fetches don't check tags).
      */
-
-
 #if !defined(pte_tagged)
     #define pte_tagged(pte)		((pte_val(pte) & PTE_ATTRINDX_MASK) == \
     PTE_ATTRINDX(MT_NORMAL_TAGGED))
@@ -204,11 +199,16 @@ static inline void my_set_pte_at(struct mm_struct *mm,
         !pte_special(pte) && pte_tagged(pte))
         mte_sync_tags(pte, 1);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
     __check_safe_pte_update(mm, ptep, pte);
     __set_pte(ptep, pte);
+#else
+    __check_racy_pte_update(mm, ptep, pte);
+    set_pte(ptep, pte);
+#endif
+
 #endif
 }
-#endif
 
 int protect_rodata_memory(unsigned nr) {
     pte_t pte;
