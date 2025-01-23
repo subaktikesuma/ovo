@@ -296,8 +296,7 @@ int access_process_vm_by_pid(pid_t from, void __user*from_addr, pid_t to, void _
 }
 
 int remap_process_memory(pid_t from, void *from_addr, pid_t to, void *to_addr) {
-/*
-    struct task_struct *task_a, *task_b;
+/*    struct task_struct *task_a, *task_b;
     struct mm_struct *mm_a, *mm_b;
     struct vm_area_struct *vma_b;
 
@@ -313,8 +312,6 @@ int remap_process_memory(pid_t from, void *from_addr, pid_t to, void *to_addr) {
     mm_a = get_task_mm(task_a);
     mm_b = get_task_mm(task_b);
 
-    
-*/
-
+    */
     return 0;
 }
