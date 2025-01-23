@@ -70,7 +70,6 @@ runs:
           echo "Warning: Found deprecated branch: ${{ inputs.tag }}"
         fi
         repo --version
-        repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ inputs.tag }} --repo-rev=v2.16
         repo sync -c -j$(nproc) --no-tags
         df -h
 
