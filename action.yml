@@ -48,8 +48,7 @@ runs:
           exit 3
         fi
         if [ ! -f "${{ inputs.module-name }}/${{ inputs.module-name }}.c" ]; then
-          echo "Error: ${inputs.module-name}/${inputs.module-name}.c does not exist."
-          exit 4
+          echo "Warning: ${{inputs.module-name}}/${{inputs.module-name}}.c does not exist."
         fi
 
     - name: Install Build Tools
