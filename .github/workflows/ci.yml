@@ -1,12 +1,12 @@
 name: GKI Kernel Module Build
 
 on:
- push:
+  push:
     branches: ["master"]
     paths:
       - ".github/workflows/ci.yml"
       - "ovo/**"
-
+  
   pull_request:
     branches: ["master"]
     paths:
