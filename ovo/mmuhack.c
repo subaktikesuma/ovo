@@ -18,14 +18,6 @@
 static struct mm_struct *init_mm_ptr = NULL;
 
 pte_t *page_from_virt_kernel(unsigned long addr) {
-    if ((uintptr_t) addr & (PAGE_SIZE - 1)) {
-        addr = addr + PAGE_SIZE & ~(PAGE_SIZE - 1);
-    }
-
-    if (!init_mm_ptr) {
-        init_mm_ptr = (struct mm_struct *) ovo_kallsyms_lookup_name("init_mm");
-    }
-
     pgd_t * pgd;
 #if __PAGETABLE_P4D_FOLDED == 1
     p4d_t *p4d;
@@ -33,6 +25,14 @@ pte_t *page_from_virt_kernel(unsigned long addr) {
     pud_t *pudp, pud;
     pmd_t *pmdp, pmd;
     pte_t *ptep;
+
+    if ((uintptr_t) addr & (PAGE_SIZE - 1)) {
+        addr = addr + PAGE_SIZE & ~(PAGE_SIZE - 1);
+    }
+
+    if (!init_mm_ptr) {
+        init_mm_ptr = (struct mm_struct *) ovo_kallsyms_lookup_name("init_mm");
+    }
 
     pgd = pgd_offset(init_mm_ptr, addr);
     if (pgd_none(*pgd) || pgd_bad(*pgd)) {
@@ -201,29 +201,17 @@ static inline void my_set_pte_at(struct mm_struct *mm,
 #endif
 
 int protect_rodata_memory(unsigned nr) {
-    uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
-    pte_t* ptep = page_from_virt_kernel(addr);
-#ifdef CONFIG_X86_64
-    #if !defined(PTE_VALID)
-    #define PTE_VALID		(_AT(pteval_t, 1) << 0)
-#endif
-        if (!(!!(pte_val(READ_ONCE(*ptep)) & PTE_VALID))) {
-            printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
-            return -2;
-        }
-        pte_t pte;
-        pte = READ_ONCE(*ptep);
-        pte = pte_wrprotect(pte);
-        my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+    pte_t pte;
+    pte_t* ptep;
+    uintptr_t addr;
 
-        __flush_tlb_one_kernel(addr); // x64
-        //  error: implicit declaration of function 'flush_tlb_one_kernel' [-Werror,-Wimplicit-function-declaration]??
-#else
+    addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
+    ptep = page_from_virt_kernel(addr);
+
     if (!pte_valid(READ_ONCE(*ptep))) { // arm64
         printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
         return -2;
     }
-    pte_t pte;
     pte = READ_ONCE(*ptep);
     pte = pte_wrprotect(pte);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
@@ -232,50 +220,39 @@ int protect_rodata_memory(unsigned nr) {
     set_pte_at(init_mm_ptr, addr, ptep, pte);
 #endif
     __flush_tlb_kernel_pgtable(addr); // arm64
-#endif
     return 0;
 }
 
 int unprotect_rodata_memory(unsigned nr) {
-    uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
-    pte_t* ptep = page_from_virt_kernel(addr);
+    pte_t pte;
+    pte_t* ptep;
+    uintptr_t addr;
 
-#ifdef CONFIG_X86_64
-    #if !defined(PTE_VALID)
-    #define PTE_VALID		(_AT(pteval_t, 1) << 0)
-#endif
-        if (!(!!(pte_val(READ_ONCE(*ptep)) & PTE_VALID))) {
-            printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
-            return -2;
-        }
-        //struct vm_struct *area = my_find_vm_area((void *) addr);
+    addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
+    ptep = page_from_virt_kernel(addr);
 
-        pte_t pte;
-        pte = READ_ONCE(*ptep);
-        pte = pte_mkwrite(pte); // high version -> pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
-        my_set_pte_at(init_mm_ptr, addr, ptep, pte);
-
-        __flush_tlb_one_kernel(addr); // x64
-#else
     if (!pte_valid(READ_ONCE(*ptep))) {
         printk(KERN_INFO "[ovo] failed to get ptep from 0x%lx\n", addr);
         return -2;
     }
-    pte_t pte;
     pte = READ_ONCE(*ptep);
 
     // 如果pte_mkwrite_novma无法使用，换成下面这两行
     // pte = set_pte_bit(pte, __pgprot(PTE_WRITE));
     // pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     pte = pte_mkwrite_novma(pte);
+#else
+    pte = pte_mkwrite(pte);
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
     my_set_pte_at(init_mm_ptr, addr, ptep, pte);
 #else
     set_pte_at(init_mm_ptr, addr, ptep, pte);
 #endif
     __flush_tlb_kernel_pgtable(addr);
-#endif
     return 0;
 }
 
