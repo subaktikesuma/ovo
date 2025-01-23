@@ -143,6 +143,8 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
     return ptep;
 }
 
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
 static inline void my_set_pte_at(struct mm_struct *mm,
                                  uintptr_t __always_unused addr,
                                  pte_t *ptep, pte_t pte)
@@ -196,6 +198,7 @@ static inline void my_set_pte_at(struct mm_struct *mm,
     __set_pte(ptep, pte);
 #endif
 }
+#endif
 
 int protect_rodata_memory(unsigned nr) {
     uintptr_t addr = (uintptr_t) ((uintptr_t) ovo_find_syscall_table() + nr & PAGE_MASK);
@@ -223,7 +226,11 @@ int protect_rodata_memory(unsigned nr) {
     pte_t pte;
     pte = READ_ONCE(*ptep);
     pte = pte_wrprotect(pte);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
     my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+#else
+    set_pte_at(init_mm_ptr, addr, ptep, pte);
+#endif
     __flush_tlb_kernel_pgtable(addr); // arm64
 #endif
     return 0;
@@ -262,7 +269,11 @@ int unprotect_rodata_memory(unsigned nr) {
     // pte = clear_pte_bit(pte, __pgprot(PTE_RDONLY));
 
     pte = pte_mkwrite_novma(pte);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
     my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+#else
+    set_pte_at(init_mm_ptr, addr, ptep, pte);
+#endif
     __flush_tlb_kernel_pgtable(addr);
 #endif
     return 0;
