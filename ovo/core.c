@@ -7,7 +7,6 @@
 #include <linux/kallsyms.h>
 #include <asm/unistd.h>
 #include <linux/highuid.h>
-#include <linux/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 #include <linux/tty.h>
