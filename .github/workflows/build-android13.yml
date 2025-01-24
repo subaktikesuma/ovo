@@ -1,4 +1,4 @@
-name: Android14 Kernel Module Build
+name: Android13 Kernel Module Build
 
 on:
   workflow_dispatch:
@@ -16,19 +16,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - version: 5.15.158
-            tag: android14-5.15
-            patch-level: 2024-08
-            arch: aarch64
-          - version: 6.1.75
-            tag: android14-6.1
-            patch-level: 2024-05
-            arch: aarch64
-          - version: 6.1.115
-            tag: android14-6.1
+          - version: 5.10.223
+            tag: android13-5.10
             patch-level: 2024-11
             arch: aarch64
-          
+          - version: 5.15.149
+            tag: android13-5.15
+            patch-level: 2024-07
+            arch: aarch64
+  
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
