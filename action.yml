@@ -112,8 +112,17 @@ runs:
       run: |
         pip install ast-grep-cli
         sudo apt-get install llvm-15 -y
+        
         ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' common/scripts/mod/modpost.c
         ast-grep -U -p 'check_exports($$$);' -r '' common/scripts/mod/modpost.c
+        
+        if [[ "${{ inputs.tag }}" == "android14-5.15" ]]; then
+          if [ "${{ inputs.arch }}" = "aarch64" ]; then
+            ast-grep -U -r 'static bool module_imports_namespace($$$ARGS) { return $AAA; }' -r 'static __attribute__((unused)) bool module_imports_namespace($$$ARGS) { return $AAA; }' common/scripts/mod/modpost.c
+            ast-grep -U -r 'static void check_for_gpl_usage($$$ARGS) { switch($A) {$$$B} }' -r 'static __attribute__((unused)) void check_for_gpl_usage($$$ARGS) { switch($A) {$$$B} }' common/scripts/mod/modpost.c
+          fi
+        fi
+        
         if [ -f common/android/gki_aarch64_modules ]; then
           echo "drivers/${{ inputs.module-name }}/${{ inputs.module-name }}.ko" >> common/android/gki_aarch64_modules
         fi
