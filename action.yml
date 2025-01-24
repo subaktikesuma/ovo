@@ -52,7 +52,7 @@ runs:
         fi
 
     - name: Install Build Tools
-      uses: awalsh128/cache-apt-pkgs-action@v1
+      uses: awalsh128/cache-apt-pkgs-action@latest
       with:
         packages: binutils git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libx11-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python3 libelf-dev binutils-aarch64-linux-gnu gcc gzip
         version: 1.0
