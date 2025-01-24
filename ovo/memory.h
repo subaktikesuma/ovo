@@ -24,8 +24,10 @@ int write_process_memory(pid_t pid, void __user* addr, void __user* src, size_t 
 // 使用access_process_vm去读写进程内存
 int access_process_vm_by_pid(pid_t from, void __user* from_addr, pid_t to, void __user* to_addr, size_t size);
 
+#if BUILD_REMAP == 1
 // 内存重映射
 void* remap_process_memory(pid_t from, void __user* from_addr, pid_t to, size_t size);
 int unmap_process_memory(pid_t from, void __user* from_addr, size_t size);
+#endif
 
 #endif //OVO_MEMORY_H

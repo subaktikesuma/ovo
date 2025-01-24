@@ -297,6 +297,7 @@ int access_process_vm_by_pid(pid_t from, void __user*from_addr, pid_t to, void _
     return 0;
 }
 
+#if BUILD_REMAP == 1
 void* remap_process_memory(pid_t from, void *from_addr, pid_t to, size_t size) {
     static struct vm_area_struct *(*ovo_vm_area_alloc)(struct mm_struct *) = NULL;
     struct task_struct *from_task, *to_task;
@@ -448,3 +449,4 @@ int unmap_process_memory(pid_t from, void *from_addr, size_t size) {
     put_task_struct(from_task);
     return 0;
 }
+#endif
