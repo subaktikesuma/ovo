@@ -206,9 +206,9 @@ static inline void my_set_pte_at(struct mm_struct *mm,
     __check_racy_pte_update(mm, ptep, pte);
     set_pte(ptep, pte);
 #endif
-
-#endif
 }
+#endif
+
 
 int protect_rodata_memory(unsigned nr) {
     pte_t pte;
