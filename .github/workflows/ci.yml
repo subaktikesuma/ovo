@@ -57,7 +57,7 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           tag: ${{ matrix.tag }}
-          lto: false
+          fast_build: false
           module-name: ovo
           module-path: ovo
 
