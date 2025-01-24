@@ -14,6 +14,7 @@
 #include <asm/page.h>
 #include <linux/pgtable.h>
 #include <linux/vmalloc.h>
+#include <linux/mman.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/mm.h>
@@ -31,6 +32,7 @@
 #endif
 
 #include "mmuhack.h"
+#include "kkit.h"
 
 #ifdef CONFIG_CMA
 //#warning CMA is enabled!
@@ -295,23 +297,154 @@ int access_process_vm_by_pid(pid_t from, void __user*from_addr, pid_t to, void _
     return 0;
 }
 
-int remap_process_memory(pid_t from, void *from_addr, pid_t to, void *to_addr) {
-/*    struct task_struct *task_a, *task_b;
-    struct mm_struct *mm_a, *mm_b;
-    struct vm_area_struct *vma_b;
+void* remap_process_memory(pid_t from, void *from_addr, pid_t to, size_t size) {
+    static struct vm_area_struct *(*ovo_vm_area_alloc)(struct mm_struct *) = NULL;
+    struct task_struct *from_task, *to_task;
+    struct vm_area_struct *from_vma, *vma;
+    pte_t* ptep;
+    unsigned long pfn;
+    void* unmapped_addr;
+    unsigned long (*get_area)(struct file *, unsigned long,
+                              unsigned long, unsigned long, unsigned long);
+    struct mm_struct* mm;
 
-    rcu_read_lock();
-    task_a = pid_task(find_vpid(from), PIDTYPE_PID);
-    task_b = pid_task(find_vpid(to), PIDTYPE_PID);
-    rcu_read_unlock();
+    if (!capable(CAP_SYS_ADMIN))
+        return NULL;
 
-    if (!task_a || !task_a->mm || !task_b || !task_b->mm) {
-        return -1;
+    size = PAGE_ALIGN(size);
+    if (!from_addr || !size || size > TASK_SIZE)
+        return NULL;
+
+    if (ovo_vm_area_alloc == NULL) {
+        ovo_vm_area_alloc = (struct vm_area_struct *(*)(struct mm_struct *))
+                ovo_kallsyms_lookup_name("vm_area_alloc");
     }
 
-    mm_a = get_task_mm(task_a);
-    mm_b = get_task_mm(task_b);
+    if(ovo_vm_area_alloc == NULL) {
+        pr_err("[ovo] ovo_vm_area_alloc not found!");
+        return NULL;
+    }
 
-    */
+    {
+        rcu_read_lock();
+        from_task = pid_task(find_vpid(from), PIDTYPE_PID);
+        to_task = pid_task(find_vpid(to), PIDTYPE_PID);
+
+        if (!from_task || !to_task || !from_task->mm || !to_task->mm)
+            return NULL;
+
+        get_task_struct(from_task);
+        get_task_struct(to_task);
+        rcu_read_unlock();
+    }
+
+    mm = get_task_mm(from_task);
+
+    from_vma = find_vma(mm, (unsigned long)from_addr);
+    if (!from_vma) {
+        mmput(mm);
+        put_task_struct(from_task);
+        put_task_struct(to_task);
+        return NULL;
+    }
+
+    ptep = page_from_virt_user(mm, (unsigned long) from_addr);
+    pfn = pte_pfn(READ_ONCE(*ptep));
+
+    { // release from_task's mm & from_task
+        mmput(mm);
+        put_task_struct(from_task);
+        mm = NULL;
+    }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
+#error "remap_process_memory: Not support Kernel 6.11.0"
+#else
+    mm = get_task_mm(to_task);
+    get_area = mm->get_unmapped_area;
+#endif
+
+    unmapped_addr = (void*) get_area(NULL, 0, size, 0, 0);
+    if (IS_ERR_VALUE(unmapped_addr)) {
+        mmput(mm);
+        put_task_struct(to_task);
+        return NULL;
+    }
+
+    if ((unsigned long ) unmapped_addr > TASK_SIZE - size) {
+        mmput(mm);
+        put_task_struct(to_task);
+        return NULL;
+    }
+
+    if (offset_in_page((unsigned long) unmapped_addr)) {
+        mmput(mm);
+        put_task_struct(to_task);
+        return NULL;
+    }
+
+    vma = ovo_vm_area_alloc(mm);
+    if (!vma) {
+        mmput(mm);
+        put_task_struct(to_task);
+        return NULL;
+    }
+
+    vma->vm_start = (unsigned long) unmapped_addr;
+    vma->vm_end = ((unsigned long) unmapped_addr) + size;
+    *((unsigned long*) &vma->vm_flags) =
+            calc_vm_prot_bits(PROT_READ | PROT_WRITE, 0);
+    vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
+
+    if(remap_pfn_range(vma, (unsigned long)unmapped_addr, pfn, size, PAGE_SHARED)) {
+        pr_err("[ovo] remap_pfn_range failed!");
+        mmput(mm);
+        put_task_struct(to_task);
+        return NULL;
+    }
+
+    mmput(mm);
+    put_task_struct(to_task);
+    return unmapped_addr;
+}
+
+int unmap_process_memory(pid_t from, void *from_addr, size_t size) {
+    struct task_struct *from_task;
+    struct mm_struct *mm;
+    struct vm_area_struct *vma;
+    pte_t* ptep;
+    unsigned long pfn;
+
+    rcu_read_lock();
+    from_task = pid_task(find_vpid(from), PIDTYPE_PID);
+
+    if (!from_task)
+        return -ESRCH;
+
+    get_task_struct(from_task);
+    rcu_read_unlock();
+
+    mm = get_task_mm(from_task);
+    if (!mm)
+        return -ESRCH;
+
+    vma = find_vma(mm, (unsigned long)from_addr);
+    if (!vma) {
+        mmput(mm);
+        put_task_struct(from_task);
+        return -ESRCH;
+    }
+
+    ptep = page_from_virt_user(mm, (unsigned long) from_addr);
+    pfn = pte_pfn(READ_ONCE(*ptep));
+
+    if (remap_pfn_range(vma, (unsigned long)from_addr, 0, size, PAGE_SHARED)) {
+        mmput(mm);
+        put_task_struct(from_task);
+        return -EIO;
+    }
+
+    mmput(mm);
+    put_task_struct(from_task);
     return 0;
 }
