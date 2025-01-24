@@ -10,6 +10,9 @@ inputs:
     description: 'Specify the Android kernel version and tag to build for (e.g., android13-5.15).'
     default: 'android13-5.15'
     required: true
+  version:
+    description: 'Kernel version. (e.g., 163)'
+    required: true
   arch:
     description: 'Specify the architecture to build for (e.g., aarch64 or x86_64).'
     required: true
@@ -233,5 +236,5 @@ runs:
     - name: Upload Kernel Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: Image-${{ inputs.tag }}-${{ inputs.arch }}
+        name: Image-with-Module-${{ inputs.version }}-${{ inputs.arch }}
         path: ./output/*

@@ -1,18 +1,6 @@
-name: GKI Kernel Module Build
+name: Android14-5.15 Kernel Module Build
 
 on:
-  push:
-    branches: [ "master" ]
-    paths:
-      - ".github/workflows/ci.yml"
-      - "ovo/**"
-
-  pull_request:
-    branches: [ "master" ]
-    paths:
-      - ".github/workflows/ci.yml"
-      - "ovo/**"
-
   workflow_dispatch:
 
 jobs:
@@ -27,16 +15,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tag:
-          - android12-5.10
-          - android13-5.10
-          - android13-5.15
-          - android14-5.15
-          - android14-6.1
-          - android15-6.6
-        arch:
-          - aarch64
-
+        include:
+          - version: 5.15.148
+            tag: android14-5.15-2024-05
+            arch: aarch64
+          - version: 5.15.149
+            tag: android14-5.15-2024-06
+            arch: aarch64
+          
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -57,6 +43,7 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           tag: ${{ matrix.tag }}
+          version: ${{ matrix.version }}
           fast_build: false
           module-name: ovo
           module-path: ovo
@@ -71,5 +58,5 @@ jobs:
       - name: Upload LKM Source Code
         uses: actions/upload-artifact@v4
         with:
-          name: ovo
+          name: ovo-module-source
           path: ovo
