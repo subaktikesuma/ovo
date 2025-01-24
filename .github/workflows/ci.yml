@@ -12,16 +12,15 @@ on:
     paths:
       - ".github/workflows/ci.yml"
       - "ovo/**"
-      -
 
   workflow_dispatch:
 
 jobs:
   build:
     name: GKI Kernel Module Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    needs: upload-artifact
     strategy:
-      fail-fast: false
       matrix:
         tag:
           - android12-5.10
@@ -56,3 +55,16 @@ jobs:
           tag: ${{ matrix.tag }}
           module-name: ovo
           module-path: ovo
+
+  upload-artifact:
+    name: Upload LKM Source Code
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Upload LKM Source Code
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovo
+          path: ovo
