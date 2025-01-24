@@ -17,12 +17,13 @@ jobs:
       matrix:
         include:
           - version: 5.15.148
-            tag: android14-5.15-2024-05
+            tag: android14-5.15
+            patch-level: 2024-05
             arch: aarch64
           - version: 5.15.149
-            tag: android14-5.15-2024-06
+            tag: android14-5.15
+            patch-level: 2024-06
             arch: aarch64
-          
           
     steps:
       - name: Maximize build space
@@ -43,7 +44,8 @@ jobs:
         uses: ./
         with:
           arch: ${{ matrix.arch }}
-          tag: ${{ matrix.tag }}
+          tag: ${{ matrix.tag }}-${{ matrix.patch-level }}
+          simple-tag: ${{ matrix.tag }}
           version: ${{ matrix.version }}
           fast_build: false
           module-name: ovo
