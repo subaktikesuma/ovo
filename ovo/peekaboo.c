@@ -40,6 +40,6 @@ void cuteBabyPleaseDontCry(void) {
 #endif
 
 #if INJECT_SYSCALLS == 1
-    
+
 #endif
 }

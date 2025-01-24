@@ -18,8 +18,12 @@ on:
 jobs:
   build:
     name: GKI Kernel Module Build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: upload-artifact
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
     strategy:
       fail-fast: false
       matrix:
@@ -53,12 +57,13 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           tag: ${{ matrix.tag }}
+          lto: false
           module-name: ovo
           module-path: ovo
 
   upload-artifact:
     name: Upload LKM Source Code
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

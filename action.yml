@@ -20,6 +20,10 @@ inputs:
   module-name:
     description: 'Specify the name of the kernel module.'
     required: true
+  lto:
+    description: 'Enable LTO build.'
+    type: boolean
+    required: true
 
 runs:
   using: "composite"
@@ -143,7 +147,8 @@ runs:
         cd common/ && git add -A && git commit -a -m "Add Kernel Module"
         repo status
 
-    - name: Build Kernel
+    - name: Build Kernel(LTO)
+      if: ${{ inputs.lto == true }}
       shell: bash
       working-directory: android-kernel
       run: |
@@ -165,6 +170,33 @@ runs:
               LTO=thin BUILD_CONFIG=common/build.config.gki.x86_64 build/build.sh CC="/usr/bin/ccache clang"
             else
               tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_x86_64_dist -- --dist_dir=dist
+            fi
+          fi
+        fi
+
+    - name: Build Kernel(NoLTO)
+      if: ${{ inputs.lto == false }}
+      shell: bash
+      working-directory: android-kernel
+      run: |
+        if [[ "${{ inputs.tag }}" == "android16-6.12" ]]; then
+          if [ "${{ inputs.arch }}" = "aarch64" ]; then
+            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_aarch64_dist
+          elif [ "${{ inputs.arch }}" = "x86_64" ]; then
+            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_x86_64_dist
+          fi
+        else
+          if [ "${{ inputs.arch }}" = "aarch64" ]; then
+            if [ -e build/build.sh ]; then
+              LTO=None BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+            else
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_aarch64_dist -- --dist_dir=dist
+            fi
+          elif [ "${{ inputs.arch }}" = "x86_64" ]; then
+            if [ -e build/build.sh ]; then
+              LTO=None BUILD_CONFIG=common/build.config.gki.x86_64 build/build.sh CC="/usr/bin/ccache clang"
+            else
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_x86_64_dist -- --dist_dir=dist
             fi
           fi
         fi
