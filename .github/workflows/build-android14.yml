@@ -1,4 +1,4 @@
-name: Android14-5.15 Kernel Module Build
+name: Android14 Kernel Module Build
 
 on:
   workflow_dispatch:
@@ -22,6 +22,7 @@ jobs:
           - version: 5.15.149
             tag: android14-5.15-2024-06
             arch: aarch64
+          
           
     steps:
       - name: Maximize build space
@@ -58,5 +59,5 @@ jobs:
       - name: Upload LKM Source Code
         uses: actions/upload-artifact@v4
         with:
-          name: ovo-module-source
+          name: ovo
           path: ovo
