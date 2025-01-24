@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: upload-artifact
     strategy:
+      fail-fast: false
       matrix:
         tag:
           - android12-5.10
