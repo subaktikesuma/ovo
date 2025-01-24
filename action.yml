@@ -22,7 +22,6 @@ inputs:
     required: true
   fast_build:
     description: 'Enable LTO build?'
-    type: boolean
     required: true
 
 runs:
@@ -148,7 +147,7 @@ runs:
         repo status
 
     - name: LTO Build Kernel
-      if: inputs.fast_build == true
+      if: inputs.fast_build == 'true'
       shell: bash
       working-directory: android-kernel
       run: |
@@ -176,7 +175,7 @@ runs:
         fi
 
     - name: Dev Build Kernel
-      if: inputs.fast_build == false
+      if: inputs.fast_build == 'false'
       shell: bash
       working-directory: android-kernel
       run: |
