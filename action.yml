@@ -195,6 +195,11 @@ runs:
       shell: bash
       working-directory: android-kernel
       run: |
+        if [[ "${{ inputs.simple-tag }}" == "android14-5.15" ]]; then
+          tools/bazel run //common:db845c_abi_update_symbol_list
+          tools/bazel run //common:kernel_aarch64_abi_update
+          tools/bazel run //common:kernel_aarch64_abi_update -- --commit
+        fi
         if [[ "${{ inputs.simple-tag }}" == "android16-6.12" ]]; then
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
             tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_aarch64_dist
