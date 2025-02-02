@@ -232,5 +232,9 @@ pid_t find_process_by_name(const char *name) {
     return 0;
 }
 
-
-
+#if INJECT_SYSCALL == 1
+int hide_process(pid_t pid) {
+    // TODO("没有必要实现这个东西")
+    return 0;
+}
+#endif

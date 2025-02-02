@@ -155,7 +155,7 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
-static inline void my_set_pte_at(struct mm_struct *mm,
+static inline int my_set_pte_at(struct mm_struct *mm,
                                  uintptr_t __always_unused addr,
                                  pte_t *ptep, pte_t pte)
 {
@@ -169,8 +169,9 @@ static inline void my_set_pte_at(struct mm_struct *mm,
         __sync_icache_dcache = (f__sync_icache_dcache) ovo_kallsyms_lookup_name("__sync_icache_dcache");
     }
 
-    if (mte_sync_tags == NULL) {
-        mte_sync_tags = (f_mte_sync_tags) ovo_kallsyms_lookup_name("mte_sync_tags");
+    if (__sync_icache_dcache == NULL) {
+        pr_err("[ovo] symbol `__sync_icache_dcache` not found\n");
+        return -1;
     }
 
 #if !defined(PTE_UXN)
@@ -196,8 +197,16 @@ static inline void my_set_pte_at(struct mm_struct *mm,
 #endif
 
     if (system_supports_mte() && pte_access_permitted(pte, false) &&
-        !pte_special(pte) && pte_tagged(pte))
+        !pte_special(pte) && pte_tagged(pte)) {
+        if (mte_sync_tags == NULL) {
+            mte_sync_tags = (f_mte_sync_tags) ovo_kallsyms_lookup_name("mte_sync_tags");
+        }
+        if (mte_sync_tags == NULL) {
+            pr_err("[ovo] symbol `mte_sync_tags` not found\n");
+            return -2;
+        }
         mte_sync_tags(pte, 1);
+    }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
     __check_safe_pte_update(mm, ptep, pte);
@@ -206,6 +215,7 @@ static inline void my_set_pte_at(struct mm_struct *mm,
     __check_racy_pte_update(mm, ptep, pte);
     set_pte(ptep, pte);
 #endif
+    return 0;
 }
 #endif
 
@@ -225,7 +235,9 @@ int protect_rodata_memory(unsigned nr) {
     pte = READ_ONCE(*ptep);
     pte = pte_wrprotect(pte);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
-    my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+    if(my_set_pte_at(init_mm_ptr, addr, ptep, pte) != 0) {
+        return -1;
+    }
 #else
     set_pte_at(init_mm_ptr, addr, ptep, pte);
 #endif
@@ -258,7 +270,9 @@ int unprotect_rodata_memory(unsigned nr) {
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
-    my_set_pte_at(init_mm_ptr, addr, ptep, pte);
+    if(my_set_pte_at(init_mm_ptr, addr, ptep, pte) != 0) {
+        return -1;
+    }
 #else
     set_pte_at(init_mm_ptr, addr, ptep, pte);
 #endif
