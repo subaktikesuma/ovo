@@ -6,6 +6,7 @@ $(MODULE)-objs += mmuhack.o
 $(MODULE)-objs += kkit.o
 $(MODULE)-objs += peekaboo.o
 $(MODULE)-objs += memory.o
+$(MODULE)-objs += server.o
 
 EXTRA_CFLAGS += -fno-pic
 EXTRA_CFLAGS += -DHIDE_SELF_MODULE=0	# 是否在模块表中移除自己

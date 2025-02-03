@@ -31,96 +31,30 @@
 
 #include "kkit.h"
 #include "peekaboo.h"
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-#endif
-
-static char random_dev_name[12];
-static dev_t dev;
-static struct cdev cdev;
-static struct class *device_class;
-
-static ssize_t my_read(struct file *file, char __user *buf, size_t count, loff_t *ppos) {
-    return 0;
-}
-
-static ssize_t my_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos) {
-    return count;
-}
-
-static const struct file_operations my_fops = {
-        .owner = THIS_MODULE,
-        .read = my_read,
-        .write = my_write,
-};
-
-static void generate_random_dev_name(void) {
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    int i;
-    u8 random_byte;
-
-    for (i = 0; i < sizeof(random_dev_name) - 1; i++) {
-        get_random_bytes(&random_byte, sizeof(random_byte));
-        random_dev_name[i] = charset[random_byte % (sizeof(charset) - 1)];
-    }
-    random_dev_name[sizeof(random_dev_name) - 1] = '\0';
-}
-
-static void dev_random_names(void) {
-    int i;
-    for (i = 0; i < 5; i++) {
-        generate_random_dev_name();
-        pr_info("Random device name %d: %s\n", i, [ovo] );
-    }
-}
+#include "server.h"
 
 static int __init ovo_init(void) {
+    int ret;
+
     cuteBabyPleaseDontCry();
+    ret = 0;
 
-    dev_random_names();
-    ret = alloc_chrdev_region(&dev, 0, 1, random_dev_name);
-    if (ret < 0) {
-        return ret;
-    }
+    ret = init_server();
 
-    cdev_init(&cdev, &my_fops);
-    cdev.owner = THIS_MODULE;
-
-    ret = cdev_add(&cdev, dev, 1);
-    if (ret < 0) {
-        unregister_chrdev_region(dev, 1);
-        return ret;
-    }
-
-    device_class = class_create(THIS_MODULE, random_dev_name);
-    if (IS_ERR(device_class)) {
-        cdev_del(&cdev);
-        unregister_chrdev_region(dev, 1);
-        return PTR_ERR(device_class);
-    }
-
-    if (IS_ERR(device_create(device_class, NULL, dev, NULL, random_dev_name))) {
-        class_destroy(device_class);
-        cdev_del(&cdev);
-        unregister_chrdev_region(dev, 1);
-        return PTR_ERR(device_class);
-    }
-
-    return 0;
+    return ret;
 }
 
 static void __exit ovo_exit(void) {
+    exit_server();
     pr_info("[ovo] goodbye!\n");
-
-    device_destroy(device_class, dev);
-    class_destroy(device_class);
-    cdev_del(&cdev);
-    unregister_chrdev_region(dev, 1);
 }
 
 module_init(ovo_init);
 module_exit(ovo_exit);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 
 MODULE_AUTHOR("fuqiuluo");
 MODULE_LICENSE("GPL");

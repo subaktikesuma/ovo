@@ -43,7 +43,7 @@ void foreach_process(void (*callback)(struct ovo_task_struct *));
 
 pid_t find_process_by_name(const char *name);
 
-#if INJECT_SYSCALL == 1
+#if INJECT_SYSCALLS == 1
 int hide_process(pid_t pid);
 #endif
 

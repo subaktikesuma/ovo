@@ -10,7 +10,6 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-#include <asm/cpu.h>
 #include <asm/page.h>
 #include <linux/pgtable.h>
 #include <linux/vmalloc.h>
@@ -171,20 +170,19 @@ int read_process_memory(pid_t pid, void __user*addr, void __user*dest, size_t si
     }
 
     task = get_pid_task(pid_struct, PIDTYPE_PID);
+    put_pid(pid_struct);
 
     //rcu_read_lock();
     //task = pid_task(find_vpid(pid), PIDTYPE_PID);
     //rcu_read_unlock();
-    // 为什么不用上面的方式获取task_struct?
-    // 上面的方式获取不会让记数+1！要改吗？随便你咯
 
-    put_pid(pid_struct);
     if(!task) {
         return -2;
     }
 
     mm = get_task_mm(task);
     put_task_struct(task);
+
     if (!mm) {
         return -3;
     }
@@ -196,9 +194,6 @@ int read_process_memory(pid_t pid, void __user*addr, void __user*dest, size_t si
     mmput(mm);
 
     if (pa && pfn_valid(__phys_to_pfn(pa)) && IS_VALID_PHYS_ADDR_RANGE(pa, size)){
-        // why not use kmap_atomic?
-        // '/proc/vmstat' -> nr_isolated_anon & nr_isolated_file
-        // There is a quantity limit, it will panic when used up!
         mapped = ioremap_cache(pa, size);
         if (mapped && !copy_to_user(dest, mapped, size)) {
             ret = 0;

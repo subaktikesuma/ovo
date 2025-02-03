@@ -19,6 +19,10 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va);
 int read_process_memory(pid_t pid, void __user* addr, void __user* dest, size_t size);
 int write_process_memory(pid_t pid, void __user* addr, void __user* src, size_t size);
 
+// 读取进程内存（一定不能是设备内存）
+// 通过直接映射区映射到内核虚拟地址空间
+
+
 // 读写进程内存
 // 不依赖于current，可以在任何上下文中调用
 // 使用access_process_vm去读写进程内存

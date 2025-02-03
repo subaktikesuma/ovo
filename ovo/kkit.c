@@ -200,6 +200,11 @@ pid_t find_process_by_name(const char *name) {
         my_get_cmdline = (void *) ovo_kallsyms_lookup_name("get_cmdline");
     }
 
+	if (my_get_cmdline == NULL) {
+		pr_err("[ovo] Failed to find get_cmdline\n");
+		return -1;
+	}
+
     rcu_read_lock();
     for_each_process(task) {
         if (task->mm == NULL) {
@@ -232,7 +237,7 @@ pid_t find_process_by_name(const char *name) {
     return 0;
 }
 
-#if INJECT_SYSCALL == 1
+#if INJECT_SYSCALLS == 1
 int hide_process(pid_t pid) {
     // TODO("没有必要实现这个东西")
     return 0;

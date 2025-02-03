@@ -10,7 +10,7 @@
 
 一些反作弊工具会监听`/proc/self/maps`，如果读取这里可能会被检测到，所以这里提供了一种获取模块基址的方法。
 
-### 将某个进程提权到root (`kkit.h->mark_pid_root`)
+### 将某个进程提权到root (`kkit.h->mark_pid_root`) （报废）
 
 通过PID找到目标进程的`task_struct`结构，创建新的`credentials结构(cred)`，设置uid/gid为`0(root)`，直接修改进程的cred指针，而不是通过标准的`commit_creds`函数。 
 其中使用了一个隐蔽的方式来提权，通过直接修改cred指针而不是`commit_creds()`，这样在ps命令下不会显示root uid。

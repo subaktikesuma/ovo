@@ -11,6 +11,7 @@
 #include <linux/version.h>
 #include <linux/moduleloader.h>
 #include <linux/stop_machine.h>
+
 #if defined(CONFIG_ARM64) || defined(CONFIG_AARCH64)
 #include <linux/pgtable.h>
 #endif
@@ -91,6 +92,9 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
 
     //pte_unmap_unlock(pte, ptlp);
 
+     //if (ptlp)
+     //   spin_unlock(ptlp);
+#error "OVO_0X202501232117"
     return pte;
 }
 #else
@@ -125,6 +129,7 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
     }
 
 #if defined(pud_leaf)
+    // 处理 PUD 级大页，直接操作 pud_val
     if (pud_leaf(pud)) {
         ptep = (pte_t *) pudp;
         goto ret;
@@ -241,6 +246,9 @@ int protect_rodata_memory(unsigned nr) {
 #else
     set_pte_at(init_mm_ptr, addr, ptep, pte);
 #endif
+
+    //flush_icache_range(addr, addr + PAGE_SIZE);
+    //__clean_dcache_area_pou(data_addr, sizeof(data));
     __flush_tlb_kernel_pgtable(addr); // arm64
     return 0;
 }
