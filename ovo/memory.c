@@ -62,24 +62,28 @@ uintptr_t get_module_base(pid_t pid, char *name) {
 
     pid_struct = find_get_pid(pid);
     if (!pid_struct) {
+		pr_err("[ovo] failed to find pid_struct\n");
         return 0;
     }
 
     task = get_pid_task(pid_struct, PIDTYPE_PID);
     put_pid(pid_struct);
     if (!task) {
+		pr_err("[ovo] failed to get task from pid_struct\n");
         return 0;
     }
 
     mm = get_task_mm(task);
     put_task_struct(task);
     if (!mm) {
+		pr_err("[ovo] failed to get mm from task\n");
         return 0;
     }
 
     buf = kmalloc(PATH_MAX, GFP_KERNEL);
     if (!buf) {
         mmput(mm);
+		pr_err("[ovo] failed to allocate memory for buf\n");
         return 0;
     }
 

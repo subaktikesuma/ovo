@@ -15,6 +15,7 @@
 #include <linux/vmalloc.h>
 #include <net/busy_poll.h>
 #include "kkit.h"
+#include "memory.h"
 
 static int ovo_release(struct socket *sock) {
 	struct sock *sk = sock->sk;
@@ -44,7 +45,7 @@ static int ovo_setsockopt(struct socket *sock, int level, int optname,
 	return -ENOPROTOOPT;
 }
 
-inline int opt_get_process_pid(int len, char __user *process_name_user) {
+int opt_get_process_pid(int len, char __user *process_name_user) {
 	int err;
 	char* process_name = kmalloc(len, GFP_KERNEL);
 	if (!process_name) {
@@ -71,7 +72,34 @@ inline int opt_get_process_pid(int len, char __user *process_name_user) {
 	return err;
 }
 
-static int ovo_getsockopt(struct socket *sock, int level, int optname,
+int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_user) {
+	int err;
+	char* module_name = kmalloc(len, GFP_KERNEL);
+	if (!module_name) {
+		return -ENOMEM;
+	}
+
+	if (copy_from_user(module_name, module_name_user, len)) {
+		err = -EFAULT;
+		goto out_module_name;
+	}
+
+	uintptr_t base = get_module_base(pid, module_name);
+	if (base == 0) {
+		err = -ESRCH;
+		goto out_module_name;
+	}
+
+	err = put_user((uintptr_t) base, (uintptr_t*) module_name_user);
+	if (err)
+		goto out_module_name;
+
+	out_module_name:
+	kfree(module_name);
+	return err;
+}
+
+static int ovo_getsockopt(struct socket *sock, int pid, int optname,
 						  char __user *optval, int __user *optlen)
 {
 	int len;
@@ -85,6 +113,16 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 	switch (optname) {
 		case OPT_GET_PROCESS_PID: {
 			return opt_get_process_pid(len, optval);
+		}
+		case OPT_IS_PROCESS_PID_ALIVE: {
+			int alive = is_pid_alive(pid);
+			if (put_user(alive, optlen)) {
+				return -EFAULT;
+			}
+			return 0;
+		}
+		case OPT_GET_PROCESS_MODULE_BASE: {
+			return opt_get_process_module_base(len, pid, optval);
 		}
 		default:
 			break;

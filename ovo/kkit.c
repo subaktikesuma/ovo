@@ -200,11 +200,6 @@ pid_t find_process_by_name(const char *name) {
         my_get_cmdline = (void *) ovo_kallsyms_lookup_name("get_cmdline");
     }
 
-	if (my_get_cmdline == NULL) {
-		pr_err("[ovo] Failed to find get_cmdline\n");
-		return -1;
-	}
-
     rcu_read_lock();
     for_each_process(task) {
         if (task->mm == NULL) {

