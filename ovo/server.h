@@ -15,7 +15,12 @@
 
 #define OPT_GET_PROCESS_PID 0
 #define OPT_IS_PROCESS_PID_ALIVE 1
-#define OPT_GET_PROCESS_MODULE_BASE	2
+#define OPT_ATTACH_PROCESS	2
+#define OPT_GET_PROCESS_MODULE_BASE	3
+
+struct ovo_sock {
+	pid_t pid;
+};
 
 int init_server(void);
 

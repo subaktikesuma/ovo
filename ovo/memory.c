@@ -47,7 +47,7 @@ static inline int memk_valid_phys_addr_range(phys_addr_t addr, size_t size)
 #define IS_VALID_PHYS_ADDR_RANGE(x,y) valid_phys_addr_range(x,y)
 #endif
 
-uintptr_t get_module_base(pid_t pid, char *name) {
+uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
     struct pid *pid_struct;
     struct task_struct *task;
     struct mm_struct *mm;
@@ -55,10 +55,17 @@ uintptr_t get_module_base(pid_t pid, char *name) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
     struct vma_iterator vmi;
 #endif
-    char *buf = NULL;
     uintptr_t result;
+	struct dentry *dentry;
+	size_t name_len;
 
     result = 0;
+
+	name_len = strlen(name);
+	if (name_len == 0) {
+		pr_err("[ovo] module name is empty\n");
+		return 0;
+	}
 
     pid_struct = find_get_pid(pid);
     if (!pid_struct) {
@@ -80,13 +87,6 @@ uintptr_t get_module_base(pid_t pid, char *name) {
         return 0;
     }
 
-    buf = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!buf) {
-        mmput(mm);
-		pr_err("[ovo] failed to allocate memory for buf\n");
-        return 0;
-    }
-
     MM_READ_LOCK(mm)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
@@ -96,18 +96,12 @@ uintptr_t get_module_base(pid_t pid, char *name) {
         for (vma = mm->mmap; vma; vma = vma->vm_next)
 #endif
     {
-        char *path_nm;
-        if (vma->vm_file) {
-            path_nm = file_path(vma->vm_file, buf, PATH_MAX - 1);
-            if (IS_ERR(path_nm)) {
-                continue;
-            }
-
-            if (!strcmp(kbasename(path_nm), name)) {
-                result = vma->vm_start;
-                goto ret;
-            }
-
+        if (vma->vm_file && (vma->vm_flags & vm_flag)) {
+			dentry = vma->vm_file->f_path.dentry;
+			if (!memcmp(dentry->d_name.name, name, min(name_len, dentry->d_name.len))) {
+				result = vma->vm_start;
+				goto ret;
+			}
         }
     }
 
@@ -115,7 +109,6 @@ uintptr_t get_module_base(pid_t pid, char *name) {
     MM_READ_UNLOCK(mm)
 
     mmput(mm);
-    kfree(buf);
     return result;
 }
 

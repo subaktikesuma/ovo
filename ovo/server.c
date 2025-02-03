@@ -72,9 +72,15 @@ int opt_get_process_pid(int len, char __user *process_name_user) {
 	return err;
 }
 
-int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_user) {
+int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_user, int flag) {
 	int err;
-	char* module_name = kmalloc(len, GFP_KERNEL);
+	char* module_name;
+
+	if (pid <= 0 || is_pid_alive(pid) == 0) {
+		return -ESRCH;
+	}
+
+	module_name = kmalloc(len, GFP_KERNEL);
 	if (!module_name) {
 		return -ENOMEM;
 	}
@@ -84,9 +90,9 @@ int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_use
 		goto out_module_name;
 	}
 
-	uintptr_t base = get_module_base(pid, module_name);
+	uintptr_t base = get_module_base(pid, module_name, flag);
 	if (base == 0) {
-		err = -ESRCH;
+		err = -ENAVAIL;
 		goto out_module_name;
 	}
 
@@ -99,10 +105,17 @@ int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_use
 	return err;
 }
 
-static int ovo_getsockopt(struct socket *sock, int pid, int optname,
+static int ovo_getsockopt(struct socket *sock, int level, int optname,
 						  char __user *optval, int __user *optlen)
 {
+	struct sock* sk;
+	struct ovo_sock* os;
 	int len;
+
+	sk = sock->sk;
+	if (!sk)
+		return -EINVAL;
+	os = ((struct ovo_sock*)((char *) sock->sk + sizeof(struct sock)));
 
 	if (get_user(len, optlen))
 		return -EFAULT;
@@ -115,14 +128,22 @@ static int ovo_getsockopt(struct socket *sock, int pid, int optname,
 			return opt_get_process_pid(len, optval);
 		}
 		case OPT_IS_PROCESS_PID_ALIVE: {
-			int alive = is_pid_alive(pid);
+			int alive = is_pid_alive(level);
 			if (put_user(alive, optlen)) {
 				return -EFAULT;
 			}
 			return 0;
 		}
+		case OPT_ATTACH_PROCESS: {
+			if(is_pid_alive(level) == 0) {
+				return -ESRCH;
+			}
+			os->pid = level;
+			pr_info("[ovo] attached proc: %d\n", level);
+			return 0;
+		}
 		case OPT_GET_PROCESS_MODULE_BASE: {
-			return opt_get_process_module_base(len, pid, optval);
+			return opt_get_process_module_base(len, os->pid, optval, level);
 		}
 		default:
 			break;
@@ -134,7 +155,7 @@ static int ovo_getsockopt(struct socket *sock, int pid, int optname,
 static struct proto ovo_proto = {
 	.name =		"OVO",
 	.owner =	THIS_MODULE,
-	.obj_size =	sizeof(struct sock),
+	.obj_size =	sizeof(struct sock) + sizeof(struct ovo_sock),
 };
 
 static struct proto_ops ovo_proto_ops = {
@@ -164,6 +185,7 @@ static int ovo_create(struct net *net, struct socket *sock, int protocol,
 {
 	uid_t caller_uid;
 	struct sock *sk;
+	struct ovo_sock *os;
 
 	caller_uid = *((uid_t*) &current_cred()->uid);
 	if (caller_uid != 0) {
@@ -184,9 +206,14 @@ static int ovo_create(struct net *net, struct socket *sock, int protocol,
 		return -ENOBUFS;
 	}
 
+	os = (struct ovo_sock*)((char *) sk + sizeof(struct sock));
+
 	ovo_proto_ops.family = free_family;
 	sock->ops = &ovo_proto_ops;
 	sock_init_data(sock, sk);
+
+	// Initialize the ovo_sock
+	os->pid = 0;
 
 	//pr_info("[ovo] OVO socket created!\n");
 	return 0;
