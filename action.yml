@@ -7,8 +7,15 @@ branding:
 
 inputs:
   tag:
-    description: 'Specify the Android kernel version and tag to build for (e.g., android13-5.15).'
-    default: 'android13-5.15'
+    description: 'Specify the Android kernel version and tag to build for (e.g., android14-5.15-2024-05).'
+    default: 'android14-5.15-2024-05'
+    required: true
+  simple-tag:
+    description: 'Simple Android kernel version and tag to build for (e.g., android14-5.15).'
+    default: 'android14-5.15'
+    required: true
+  version:
+    description: 'Kernel version. (e.g., 163)'
     required: true
   arch:
     description: 'Specify the architecture to build for (e.g., aarch64 or x86_64).'
@@ -37,8 +44,8 @@ runs:
       shell: bash
       run: |
         VALID_TAGS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12")
-        if [[ ! " ${VALID_TAGS[@]} " =~ " ${{ inputs.tag }} " ]]; then
-          echo "Invalid tag specified: ${{ inputs.tag }}. Must be one of: ${VALID_TAGS[@]}"
+        if [[ ! " ${VALID_TAGS[@]} " =~ " ${{ inputs.simple-tag }} " ]]; then
+          echo "Invalid tag specified: ${{ inputs.simple-tag }}. Must be one of: ${VALID_TAGS[@]}"
           exit 1
         fi
         if [ ! -d "${{ inputs.module-name }}" ]; then
@@ -116,10 +123,10 @@ runs:
         ast-grep -U -p '$$$ check_exports($$$) {$$$}' -r '' common/scripts/mod/modpost.c
         ast-grep -U -p 'check_exports($$$);' -r '' common/scripts/mod/modpost.c
         
-        if [[ "${{ inputs.tag }}" == "android14-5.15" ]]; then
+        if [[ "${{ inputs.simple-tag }}" == "android14-5.15" ]]; then
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
-            ast-grep -U -r 'static bool module_imports_namespace($$$ARGS) { return $AAA; }' -r 'static __attribute__((unused)) bool module_imports_namespace($$$ARGS) { return $AAA; }' common/scripts/mod/modpost.c
-            ast-grep -U -r 'static void check_for_gpl_usage($$$ARGS) { switch($A) {$$$B} }' -r 'static __attribute__((unused)) void check_for_gpl_usage($$$ARGS) { switch($A) {$$$B} }' common/scripts/mod/modpost.c
+            ast-grep -U -p 'static bool module_imports_namespace($$$ARGS) { return $AAA; }' -r 'static __attribute__((unused)) bool module_imports_namespace($$$ARGS) { return $AAA; }' common/scripts/mod/modpost.c
+            ast-grep -U -p 'static void check_for_gpl_usage($$$ARGS) { switch($A) {$$$B} }' -r 'static __attribute__((unused)) void check_for_gpl_usage($$$ARGS) { switch($A) {$$$B} }' common/scripts/mod/modpost.c
           fi
         fi
         
@@ -161,7 +168,7 @@ runs:
       working-directory: android-kernel
       run: |
         
-        if [[ "${{ inputs.tag }}" == "android16-6.12" ]]; then
+        if [[ "${{ inputs.simple-tag }}" == "android16-6.12" ]]; then
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
             tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_aarch64_dist
           elif [ "${{ inputs.arch }}" = "x86_64" ]; then
@@ -188,7 +195,12 @@ runs:
       shell: bash
       working-directory: android-kernel
       run: |
-        if [[ "${{ inputs.tag }}" == "android16-6.12" ]]; then
+        if [[ "${{ inputs.simple-tag }}" == "android14-5.15" ]]; then
+          tools/bazel run //common:db845c_abi_update_symbol_list
+          tools/bazel run //common:kernel_aarch64_abi_update
+          tools/bazel run //common:kernel_aarch64_abi_update -- --commit
+        fi
+        if [[ "${{ inputs.simple-tag }}" == "android16-6.12" ]]; then
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
             tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_aarch64_dist
           elif [ "${{ inputs.arch }}" = "x86_64" ]; then
@@ -213,14 +225,14 @@ runs:
     - name: Prepare Artifacts
       shell: bash
       run: |
-        if [[ "${{ inputs.tag }}" == "android16-6.12" ]]; then
+        if [[ "${{ inputs.simple-tag }}" == "android16-6.12" ]]; then
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
             OUTDIR=android-kernel/out/kernel_aarch64/dist
           elif [ "${{ inputs.arch }}" = "x86_64" ]; then
             OUTDIR=android-kernel/out/kernel_x86_64/dist
           fi
         else
-          OUTDIR=android-kernel/out/${{ inputs.tag }}/dist
+          OUTDIR=android-kernel/out/${{ inputs.simple-tag }}/dist
           if [ ! -e $OUTDIR ]; then
             OUTDIR=android-kernel/dist
           fi
@@ -228,10 +240,10 @@ runs:
         mkdir output
         ls -al $OUTDIR/
         cp $OUTDIR/*Image* ./output/
-        cp $OUTDIR/${{ inputs.module-name }}.ko ./output/${{ inputs.tag }}_${{ inputs.module-name }}.ko
+        cp $OUTDIR/${{ inputs.module-name }}.ko ./output/${{ inputs.simple-tag }}_${{ inputs.module-name }}.ko
 
     - name: Upload Kernel Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: Image-${{ inputs.tag }}-${{ inputs.arch }}
+        name: Image-with-Modules-${{ inputs.version }}-${{ inputs.arch }}
         path: ./output/*

@@ -1,4 +1,4 @@
-name: Android14-5.15 Kernel Module Build
+name: Android15 Kernel Module Build
 
 on:
   workflow_dispatch:
@@ -15,11 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tag:
-          - android14-5.15
-        arch:
-          - aarch64
-
+        include:
+          - version: 6.6.57
+            tag: android15-6.6
+            patch-level: 2024-12
+            arch: aarch64
+          
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -39,7 +40,9 @@ jobs:
         uses: ./
         with:
           arch: ${{ matrix.arch }}
-          tag: ${{ matrix.tag }}
+          tag: ${{ matrix.tag }}-${{ matrix.patch-level }}
+          simple-tag: ${{ matrix.tag }}
+          version: ${{ matrix.version }}
           fast_build: false
           module-name: ovo
           module-path: ovo
