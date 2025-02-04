@@ -206,11 +206,15 @@ int read_process_memory_ioremap(pid_t pid, void __user*addr, void __user*dest, s
 		return ret;
 	}
 
-    if (pa && pfn_valid(__phys_to_pfn(pa)) && IS_VALID_PHYS_ADDR_RANGE(pa, size)){
-        mapped = ioremap_cache(pa, size);
-        if (mapped && !copy_to_user(dest, mapped, size)) {
-            ret = 0;
-        }
+    if (phy_addr && pfn_valid(__phys_to_pfn(phy_addr)) && IS_VALID_PHYS_ADDR_RANGE(phy_addr, size)){
+        mapped = ioremap_cache(phy_addr, size);
+		if (!mapped) {
+			ret = -ENOMEM;
+		} else if (copy_to_user(dest, mapped, size)) {
+            ret = -EACCES;
+        } else {
+			ret = 0;
+		}
         if (mapped) {
             iounmap(mapped);
         }
@@ -257,16 +261,23 @@ int write_process_memory_ioremap(pid_t pid, void __user*addr, void __user*src, s
 }
 
 int access_process_vm_by_pid(pid_t from, void __user*from_addr, pid_t to, void __user*to_addr, size_t size) {
-    struct task_struct *task;
     char __kernel *buf;
     int ret;
+	struct task_struct *task;
+	struct pid *pid_struct;
 
-    rcu_read_lock();
-    // find_vpid() does not take a reference to the pid, so we must hold RCU
-    task = pid_task(find_vpid(from), PIDTYPE_PID);
-    rcu_read_unlock();
+	pid_struct = find_get_pid(from);
+	if (!pid_struct) {
+		pr_err("[ovo] failed to find pid_struct(from): %s\n", __func__);
+		return -ESRCH;
+	}
 
-    if (!task || !task->mm) return -ESRCH;
+	task = get_pid_task(pid_struct, PIDTYPE_PID);
+	put_pid(pid_struct);
+	if(!task) {
+		pr_err("[ovo] failed to get task from pid_struct(from): %s\n", __func__);
+		return -ESRCH;
+	}
 
     buf = vmalloc(size);
     if (!buf) return -ENOMEM;

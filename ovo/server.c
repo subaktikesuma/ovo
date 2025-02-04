@@ -45,7 +45,7 @@ static int ovo_setsockopt(struct socket *sock, int level, int optname,
 	return -ENOPROTOOPT;
 }
 
-int opt_get_process_pid(int len, char __user *process_name_user) {
+__always_inline int ovo_get_process_pid(int len, char __user *process_name_user) {
 	int err;
 	char* process_name = kmalloc(len, GFP_KERNEL);
 	if (!process_name) {
@@ -72,13 +72,9 @@ int opt_get_process_pid(int len, char __user *process_name_user) {
 	return err;
 }
 
-int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_user, int flag) {
+__always_inline int ovo_get_process_module_base(int len, pid_t pid, char __user *module_name_user, int flag) {
 	int err;
 	char* module_name;
-
-	if (pid <= 0 || is_pid_alive(pid) == 0) {
-		return -ESRCH;
-	}
 
 	module_name = kmalloc(len, GFP_KERNEL);
 	if (!module_name) {
@@ -105,12 +101,17 @@ int opt_get_process_module_base(int len, pid_t pid, char __user *module_name_use
 	return err;
 }
 
+/*
+ * Don't worry about why the varname here is wrong,
+ * in fact, this operation is similar to using ContentProvider to interact with Xposed module in Android,
+ * and that thing is also wrong!
+ */
 static int ovo_getsockopt(struct socket *sock, int level, int optname,
 						  char __user *optval, int __user *optlen)
 {
 	struct sock* sk;
 	struct ovo_sock* os;
-	int len;
+	int len, alive;
 
 	sk = sock->sk;
 	if (!sk)
@@ -118,11 +119,11 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 	os = ((struct ovo_sock*)((char *) sock->sk + sizeof(struct sock)));
 
 	switch (optname) {
-		case OPT_GET_PROCESS_PID: {
-			return opt_get_process_pid(len, optval);
+		case REQ_GET_PROCESS_PID: {
+			return ovo_get_process_pid(level, optval);
 		}
-		case OPT_IS_PROCESS_PID_ALIVE: {
-			int alive = is_pid_alive(level);
+		case REQ_IS_PROCESS_PID_ALIVE: {
+			alive = is_pid_alive(level);
 			if (put_user(alive, optlen)) {
 				return -EFAULT;
 			}
@@ -136,8 +137,50 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 			pr_info("[ovo] attached process: %d\n", level);
 			return 0;
 		}
-		case OPT_GET_PROCESS_MODULE_BASE: {
-			return opt_get_process_module_base(len, os->pid, optval, level);
+		case REQ_ACCESS_PROCESS_VM: {
+			if (get_user(len, optlen))
+				return -EFAULT;
+
+			if (len < sizeof(struct req_access_process_vm))
+				return -EINVAL;
+
+			struct req_access_process_vm req;
+			if (copy_from_user(&req, optval, sizeof(struct req_access_process_vm)))
+				return -EFAULT;
+
+			return access_process_vm_by_pid(req.from, req.from_addr, req.to, req.to_addr, req.size);
+		}
+		default:
+			break;
+	}
+
+	// The following need to attach to a process!
+	// u should check whether the attached process is legitimate
+	if (os->pid <= 0 || is_pid_alive(os->pid) == 0) {
+		return -ESRCH;
+	}
+
+	switch (optname) {
+		case REQ_GET_PROCESS_MODULE_BASE: {
+			if (get_user(len, optlen))
+				return -EFAULT;
+
+			if (len < 0)
+				return -EINVAL;
+
+			return ovo_get_process_module_base(len, os->pid, optval, level);
+		}
+		case REQ_READ_PROCESS_MEMORY_IOREMAP: {
+			return read_process_memory_ioremap(os->pid, (void *) optval, (void *) optlen, level);
+		}
+		case REQ_WRITE_PROCESS_MEMORY_IOREMAP: {
+			return write_process_memory_ioremap(os->pid, (void *) optval, (void *) optlen, level);
+		}
+		case REQ_READ_PROCESS_MEMORY: {
+			return read_process_memory(os->pid, (void *) optval, (void *) optlen, level);
+		}
+		case REQ_WRITE_PROCESS_MEMORY: {
+			return write_process_memory(os->pid, (void *) optval, (void *) optlen, level);
 		}
 		default:
 			break;

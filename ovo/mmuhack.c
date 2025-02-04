@@ -174,11 +174,6 @@ static inline int my_set_pte_at(struct mm_struct *mm,
         __sync_icache_dcache = (f__sync_icache_dcache) ovo_kallsyms_lookup_name("__sync_icache_dcache");
     }
 
-    if (__sync_icache_dcache == NULL) {
-        pr_err("[ovo] symbol `__sync_icache_dcache` not found\n");
-        return -1;
-    }
-
 #if !defined(PTE_UXN)
 #define PTE_UXN			(_AT(pteval_t, 1) << 54)	/* User XN */
 #endif
@@ -187,8 +182,12 @@ static inline int my_set_pte_at(struct mm_struct *mm,
 #define pte_user_exec(pte)	(!(pte_val(pte) & PTE_UXN))
 #endif
 
-    if (pte_present(pte) && pte_user_exec(pte) && !pte_special(pte))
-        __sync_icache_dcache(pte);
+	if (__sync_icache_dcache == NULL) {
+		pr_warn("[ovo] symbol `__sync_icache_dcache` not found\n");
+	} else {
+		if (pte_present(pte) && pte_user_exec(pte) && !pte_special(pte))
+                __sync_icache_dcache(pte);
+	}
 
     /*
      * If the PTE would provide user space access to the tags associated
