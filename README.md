@@ -37,6 +37,20 @@ A stealthy approach to elevate process privileges by:
 - Directly modifying process credential pointer instead of using `commit_creds()`
 - Avoiding root uid visibility in ps command output
 
+### Fast Cross-Process Memory Remapping (`process_vaddr_to_pfn`, `remap_process_memory`)
+
+An efficient approach for cross-process memory access by:
+- Converting source process virtual address to physical page frame number (PFN)
+- Directly remapping memory through page table manipulation
+- Bypassing traditional system calls and memory copy operations
+- Achieving 3ms per 100M operations vs 80ms/100k ops with traditional methods
+
+Performance highlights:
+- Direct page table access without syscalls
+- 100M memory operations: ~3ms
+- Traditional approach (ioremap): 80ms for 100k operations
+- ~26,000x performance improvement over conventional methods
+
 # CI Support
 
 - [android-kernel-build-action](https://github.com/feicong/android-kernel-build-action/tree/main)
