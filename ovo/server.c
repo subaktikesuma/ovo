@@ -111,7 +111,7 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock* sk;
 	struct ovo_sock* os;
-	int len, alive;
+	int len, alive, ret;
 
 	sk = sock->sk;
 	if (!sk)
@@ -182,11 +182,50 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 		case REQ_WRITE_PROCESS_MEMORY: {
 			return write_process_memory(os->pid, (void *) optval, (void *) optlen, level);
 		}
+		case REMAP_MEMORY: {
+			unsigned long pfn;
+			pgprot_t prot;
+			ret = process_vaddr_to_pfn(os->pid, optval, &pfn, &prot, level);
+			if (ret) {
+				pr_err("[ovo] process_vaddr_to_pfn failed\n");
+				return ret;
+			}
+
+			os->pfn = pfn;
+			//os->pfn_prot = prot;
+			return 0;
+		}
 		default:
 			break;
 	}
 
 	return -EOPNOTSUPP;
+}
+
+int ovo_mmap(struct file *file, struct socket *sock,
+				 struct vm_area_struct *vma) {
+	struct ovo_sock *os;
+
+	if (!sock->sk) {
+		return -EINVAL;
+	}
+
+	os = (struct ovo_sock*)((char *) sock->sk + sizeof(struct sock));
+
+	if (os->pid <= 0 || is_pid_alive(os->pid) == 0) {
+		return -ESRCH;
+	}
+
+	if (!os->pfn) {
+		return -EFAULT;
+	}
+
+	if (system_supports_mte()) {
+		vm_flags_set(vma, VM_MTE);
+	}
+	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
+
+	return remap_process_memory(vma, os->pfn, vma->vm_end - vma->vm_start);
 }
 
 static struct proto ovo_proto = {
@@ -212,7 +251,7 @@ static struct proto_ops ovo_proto_ops = {
 	.getsockopt	= ovo_getsockopt,
 	.sendmsg	= sock_no_sendmsg,
 	.recvmsg	= sock_no_recvmsg,
-	.mmap		= sock_no_mmap,
+	.mmap		= ovo_mmap
 };
 
 static int free_family = AF_DECnet;
@@ -250,7 +289,7 @@ static int ovo_create(struct net *net, struct socket *sock, int protocol,
 	sock_init_data(sock, sk);
 
 	// Initialize the ovo_sock
-	os->pid = 0;
+	memset(os, 0, sizeof(struct ovo_sock));
 
 	//pr_info("[ovo] OVO socket created!\n");
 	return 0;

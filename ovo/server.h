@@ -22,6 +22,7 @@
 #define REQ_ACCESS_PROCESS_VM	6
 #define REQ_READ_PROCESS_MEMORY	7
 #define REQ_WRITE_PROCESS_MEMORY 8
+#define REMAP_MEMORY 9
 
 struct req_access_process_vm {
 	pid_t from;
@@ -31,8 +32,12 @@ struct req_access_process_vm {
 	size_t size;
 };
 
+// Note:an ovo_sock can only be mmap once
 struct ovo_sock {
 	pid_t pid;
+
+	unsigned long pfn;
+	//pgprot_t pfn_prot;
 };
 
 int init_server(void);
