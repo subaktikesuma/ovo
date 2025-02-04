@@ -117,12 +117,6 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 		return -EINVAL;
 	os = ((struct ovo_sock*)((char *) sock->sk + sizeof(struct sock)));
 
-	if (get_user(len, optlen))
-		return -EFAULT;
-
-	if (len < 0)
-		return -EINVAL;
-
 	switch (optname) {
 		case OPT_GET_PROCESS_PID: {
 			return opt_get_process_pid(len, optval);
@@ -134,12 +128,12 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 			}
 			return 0;
 		}
-		case OPT_ATTACH_PROCESS: {
+		case REQ_ATTACH_PROCESS: {
 			if(is_pid_alive(level) == 0) {
 				return -ESRCH;
 			}
 			os->pid = level;
-			pr_info("[ovo] attached proc: %d\n", level);
+			pr_info("[ovo] attached process: %d\n", level);
 			return 0;
 		}
 		case OPT_GET_PROCESS_MODULE_BASE: {

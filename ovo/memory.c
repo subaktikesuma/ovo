@@ -153,42 +153,58 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
     return page_addr + page_offset;
 }
 
-int read_process_memory(pid_t pid, void __user*addr, void __user*dest, size_t size) {
-    struct task_struct *task;
-    struct mm_struct *mm;
-    struct pid *pid_struct;
-    phys_addr_t pa;
+static int pid_vaddr_to_phy(pid_t global_pid, void *addr, phys_addr_t* pa) {
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct pid *pid_struct;
+
+	pid_struct = find_get_pid(global_pid);
+	if (!pid_struct) {
+		pr_err("[ovo] failed to find pid_struct: %s\n", __func__);
+		return -ESRCH;
+	}
+
+	task = get_pid_task(pid_struct, PIDTYPE_PID);
+	put_pid(pid_struct);
+	if(!task) {
+		pr_err("[ovo] failed to get task from pid_struct: %s\n", __func__);
+		return -ESRCH;
+	}
+
+	mm = get_task_mm(task);
+	if (!mm) {
+		pr_err("[ovo] failed to get mm from task: %s\n", __func__);
+		return -ESRCH;
+	}
+
+	MM_READ_LOCK(mm)
+	*pa = vaddr_to_phy_addr(mm, (uintptr_t)addr);
+	MM_READ_UNLOCK(mm)
+	mmput(mm);
+	put_task_struct(task);
+
+	if(*pa == 0) {
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int read_process_memory_ioremap(pid_t pid, void __user*addr, void __user*dest, size_t size) {
+    phys_addr_t phy_addr;
     int ret;
     void* mapped;
 
-    pid_struct = find_get_pid(pid);
-    if (!pid_struct) {
-        return -1;
-    }
+	if (!access_ok(dest, size)) {
+		pr_err("[ovo] access_ok failed: %s\n", __func__);
+		return -EACCES;
+	}
 
-    task = get_pid_task(pid_struct, PIDTYPE_PID);
-    put_pid(pid_struct);
-
-    //rcu_read_lock();
-    //task = pid_task(find_vpid(pid), PIDTYPE_PID);
-    //rcu_read_unlock();
-
-    if(!task) {
-        return -2;
-    }
-
-    mm = get_task_mm(task);
-    put_task_struct(task);
-
-    if (!mm) {
-        return -3;
-    }
-
-    ret = -4;
-    MM_READ_LOCK(mm)
-    pa = vaddr_to_phy_addr(mm, (uintptr_t)addr);
-    MM_READ_UNLOCK(mm)
-    mmput(mm);
+    ret = pid_vaddr_to_phy(pid, addr, &phy_addr);
+	if (ret) {
+		pr_err("[ovo] pid_vaddr_to_phy failed: %s\n", __func__);
+		return ret;
+	}
 
     if (pa && pfn_valid(__phys_to_pfn(pa)) && IS_VALID_PHYS_ADDR_RANGE(pa, size)){
         mapped = ioremap_cache(pa, size);
@@ -198,54 +214,45 @@ int read_process_memory(pid_t pid, void __user*addr, void __user*dest, size_t si
         if (mapped) {
             iounmap(mapped);
         }
-    }
+    } else {
+		ret = -EFAULT;
+	}
 
     return ret;
 }
 
-int write_process_memory(pid_t pid, void __user*addr, void __user*src, size_t size) {
-    struct task_struct *task;
-    struct mm_struct *mm;
-    struct pid *pid_struct;
+int write_process_memory_ioremap(pid_t pid, void __user*addr, void __user*src, size_t size) {
     phys_addr_t pa;
     int ret;
     void* mapped;
 
-    pid_struct = find_get_pid(pid);
-    if (!pid_struct) {
-        return -1;
-    }
+	if (!access_ok(src, size)) {
+		return -EACCES;
+	}
 
-    task = get_pid_task(pid_struct, PIDTYPE_PID);
-    put_pid(pid_struct);
-    if(!task) {
-        return -2;
-    }
-
-    mm = get_task_mm(task);
-    put_task_struct(task);
-    if (!mm) {
-        return -3;
-    }
-
-    ret = -4;
-    MM_READ_LOCK(mm)
-    pa = vaddr_to_phy_addr(mm, (uintptr_t)addr);
-    MM_READ_UNLOCK(mm)
-    mmput(mm);
+	ret = pid_vaddr_to_phy(pid, addr, &pa);
+	if (ret) {
+		pr_err("[ovo] pid_vaddr_to_phy failed: %s\n", __func__);
+		return ret;
+	}
 
     if (pa && pfn_valid(__phys_to_pfn(pa)) && IS_VALID_PHYS_ADDR_RANGE(pa, size)){
         // why not use kmap_atomic?
         // '/proc/vmstat' -> nr_isolated_anon & nr_isolated_file
         // There is a quantity limit, it will panic when used up!
         mapped = ioremap_cache(pa, size);
-        if (mapped && !copy_from_user(mapped, src, size)) {
-            ret = 0;
-        }
+		if (!mapped) {
+			ret = -ENOMEM;
+		} else if (copy_from_user(mapped, src, size)) {
+			ret = -EACCES;
+		} else {
+			ret = 0;
+		}
         if (mapped) {
             iounmap(mapped);
         }
     }
+
     return ret;
 }
 
@@ -267,26 +274,93 @@ int access_process_vm_by_pid(pid_t from, void __user*from_addr, pid_t to, void _
     ret = access_process_vm(task, (unsigned long) from_addr, buf, (int) size, 0);
     if (ret != size) {
         vfree(buf);
+		put_task_struct(task);
         return -EIO;
     }
+	put_task_struct(task);
 
-    rcu_read_lock();
-    task = pid_task(find_vpid(to), PIDTYPE_PID);
-    rcu_read_unlock();
+	pid_struct = find_get_pid(to);
+	if (!pid_struct) {
+		pr_err("[ovo] failed to find pid_struct(to): %s\n", __func__);
+		vfree(buf);
+		return -ESRCH;
+	}
 
-    if (!task || !task->mm) {
-        vfree(buf);
-        return -ESRCH;
-    }
+	task = get_pid_task(pid_struct, PIDTYPE_PID);
+	put_pid(pid_struct);
+	if(!task) {
+		pr_err("[ovo] failed to get task from pid_struct(to): %s\n", __func__);
+		vfree(buf);
+		return -ESRCH;
+	}
 
     ret = access_process_vm(task, (unsigned long) to_addr, buf, (int) size, FOLL_WRITE);
     if (ret != size) {
         vfree(buf);
+		put_task_struct(task);
         return -EIO;
     }
 
     vfree(buf);
+	put_task_struct(task);
     return 0;
+}
+
+int read_process_memory(pid_t pid, void *addr, void *dest, size_t size) {
+	phys_addr_t pa;
+	int ret;
+	void* mapped;
+
+	if (!access_ok(dest, size)) {
+		return -EACCES;
+	}
+
+	ret = pid_vaddr_to_phy(pid, addr, &pa);
+	if (ret) {
+		pr_err("[ovo] pid_vaddr_to_phy failed: %s\n", __func__);
+		return ret;
+	}
+
+	if (pa && pfn_valid(__phys_to_pfn(pa)) && IS_VALID_PHYS_ADDR_RANGE(pa, size)){
+		mapped = phys_to_virt(pa);
+		if (!mapped) {
+			ret = -ENOMEM;
+		} else if (copy_to_user(dest, mapped, size)) {
+			ret = -EACCES;
+		} else {
+			ret = 0;
+		}
+	}
+
+	return ret;
+}
+
+int write_process_memory(pid_t pid, void *addr, void *src, size_t size) {
+	phys_addr_t pa;
+	int ret;
+	void* mapped;
+
+	if (!access_ok(src, size)) {
+		return -EACCES;
+	}
+
+	ret = pid_vaddr_to_phy(pid, addr, &pa);
+	if (ret) {
+		pr_err("[ovo] pid_vaddr_to_phy failed: %s\n", __func__);
+		return ret;
+	}
+
+	if (pa && pfn_valid(__phys_to_pfn(pa)) && IS_VALID_PHYS_ADDR_RANGE(pa, size)){
+		mapped = phys_to_virt(pa);
+		if (!mapped) {
+			ret = -ENOMEM;
+		} else if (copy_from_user(mapped, src, size)) {
+			ret = -EACCES;
+		} else {
+			ret = 0;
+		}
+	}
+	return ret;
 }
 
 #if BUILD_REMAP == 1

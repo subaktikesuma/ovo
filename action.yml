@@ -179,13 +179,13 @@ runs:
             if [ -e build/build.sh ]; then
               LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
             else
-              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
             fi
           elif [ "${{ inputs.arch }}" = "x86_64" ]; then
             if [ -e build/build.sh ]; then
               LTO=thin BUILD_CONFIG=common/build.config.gki.x86_64 build/build.sh CC="/usr/bin/ccache clang"
             else
-              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=thin //common:kernel_x86_64_dist -- --dist_dir=dist
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_x86_64_dist -- --dist_dir=dist
             fi
           fi
         fi
@@ -202,22 +202,22 @@ runs:
         fi
         if [[ "${{ inputs.simple-tag }}" == "android16-6.12" ]]; then
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
-            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_aarch64_dist
+            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=none //common:kernel_aarch64_dist
           elif [ "${{ inputs.arch }}" = "x86_64" ]; then
-            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_x86_64_dist
+            tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=none //common:kernel_x86_64_dist
           fi
         else
           if [ "${{ inputs.arch }}" = "aarch64" ]; then
             if [ -e build/build.sh ]; then
               LTO=none BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
             else
-              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_aarch64_dist -- --dist_dir=dist
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=none //common:kernel_aarch64_dist -- --dist_dir=dist
             fi
           elif [ "${{ inputs.arch }}" = "x86_64" ]; then
             if [ -e build/build.sh ]; then
               LTO=none BUILD_CONFIG=common/build.config.gki.x86_64 build/build.sh CC="/usr/bin/ccache clang"
             else
-              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --lto=none //common:kernel_x86_64_dist -- --dist_dir=dist
+              tools/bazel run --disk_cache=/home/runner/.cache/bazel --config=fast --config=stamp --lto=none //common:kernel_x86_64_dist -- --dist_dir=dist
             fi
           fi
         fi
