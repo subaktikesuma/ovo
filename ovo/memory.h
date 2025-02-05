@@ -11,7 +11,7 @@
 
 uintptr_t get_module_base(pid_t pid, char *name, int vm_flag);
 
-phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va, pgprot_t* pte_prot);
+phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va);
 
 // 读写进程内存
 // 依赖于current，只能在进程上下文中调用
@@ -30,7 +30,7 @@ int write_process_memory(pid_t pid, void __user* addr, void __user* src, size_t 
 int access_process_vm_by_pid(pid_t from, void __user* from_addr, pid_t to, void __user* to_addr, size_t size);
 
 #if BUILD_REMAP == 1
-int process_vaddr_to_pfn(pid_t from, void __user* from_addr, unsigned long* pfn, pgprot_t* pte_prot, size_t size);
+int process_vaddr_to_pfn(pid_t from, void __user* from_addr, unsigned long* pfn, size_t size);
 
 // 内存重映射
 int remap_process_memory(struct vm_area_struct *vma, unsigned long pfn, size_t size);

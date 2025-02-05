@@ -112,11 +112,10 @@ uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
     return result;
 }
 
-phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va, pgprot_t* pte_prot) {
+phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
     pte_t *ptep;
     phys_addr_t page_addr;
     uintptr_t page_offset;
-	pgprot_t orig_prot;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) && defined(OVO_0X202501232139)
     spinlock_t *ptlp;
@@ -143,11 +142,6 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va, pgprot_t* pte_
 #else
 #error unsupported kernel version：__pte_to_phys or pte_pfn
 #endif
-
-	if (pte_prot) {
-		orig_prot = pte_pgprot(*ptep);
-		*pte_prot = orig_prot;
-	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) && defined(OVO_0X202501232139)
     pte_unmap_unlock(pte, ptlp);
@@ -185,7 +179,7 @@ static int pid_vaddr_to_phy(pid_t global_pid, void *addr, phys_addr_t* pa) {
 	}
 
 	MM_READ_LOCK(mm)
-	*pa = vaddr_to_phy_addr(mm, (uintptr_t)addr, NULL);
+	*pa = vaddr_to_phy_addr(mm, (uintptr_t)addr);
 	MM_READ_UNLOCK(mm)
 	mmput(mm);
 	put_task_struct(task);
@@ -385,13 +379,13 @@ int write_process_memory(pid_t pid, void *addr, void *src, size_t size) {
 static int (*my_remap_pfn_range)(struct vm_area_struct *, unsigned long addr,
 					unsigned long pfn, unsigned long size, pgprot_t) = NULL;
 
-int process_vaddr_to_pfn(pid_t from, void __user* from_addr, unsigned long* pfn, pgprot_t* pte_prot, size_t size) {
+int process_vaddr_to_pfn(pid_t from, void __user* from_addr, unsigned long* pfn, size_t size) {
 	phys_addr_t pa;
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct pid *pid_struct;
 
-	if(!pfn || !pte_prot) {
+	if(!pfn) {
 		return -EINVAL;
 	}
 
@@ -415,7 +409,7 @@ int process_vaddr_to_pfn(pid_t from, void __user* from_addr, unsigned long* pfn,
 	}
 
 	MM_READ_LOCK(mm)
-	pa = vaddr_to_phy_addr(mm, (uintptr_t)from_addr, pte_prot);
+	pa = vaddr_to_phy_addr(mm, (uintptr_t)from_addr);
 	MM_READ_UNLOCK(mm)
 	mmput(mm);
 	put_task_struct(task);

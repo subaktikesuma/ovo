@@ -36,8 +36,8 @@ struct req_access_process_vm {
 struct ovo_sock {
 	pid_t pid;
 
+	atomic_t remap_in_progress;
 	unsigned long pfn;
-	//pgprot_t pfn_prot;
 };
 
 int init_server(void);
