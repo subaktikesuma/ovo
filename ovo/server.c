@@ -1,6 +1,8 @@
 //
 // Created by fuqiuluo on 25-2-3.
 //
+#pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
+
 #include "server.h"
 #include <linux/init.h>
 #include <linux/sched/mm.h>
@@ -47,7 +49,10 @@ static int ovo_setsockopt(struct socket *sock, int level, int optname,
 
 __always_inline int ovo_get_process_pid(int len, char __user *process_name_user) {
 	int err;
-	char* process_name = kmalloc(len, GFP_KERNEL);
+	pid_t pid;
+	char* process_name;
+
+	process_name = kmalloc(len, GFP_KERNEL);
 	if (!process_name) {
 		return -ENOMEM;
 	}
@@ -57,7 +62,7 @@ __always_inline int ovo_get_process_pid(int len, char __user *process_name_user)
 		goto out_proc_name;
 	}
 
-	pid_t pid = find_process_by_name(process_name);
+	pid = find_process_by_name(process_name);
 	if (pid < 0) {
 		err = -ESRCH;
 		goto out_proc_name;

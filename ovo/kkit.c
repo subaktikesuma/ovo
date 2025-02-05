@@ -63,7 +63,6 @@ bool is_file_exist(const char *filename) {
 }
 
 unsigned long ovo_kallsyms_lookup_name(const char *symbol_name) {
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
     typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
 
@@ -157,7 +156,7 @@ int is_pid_alive(pid_t pid) {
 
 static int (*my_get_cmdline)(struct task_struct *task, char *buffer, int buflen) = NULL;
 
-void foreach_process(void (*callback)(struct ovo_task_struct *)) {
+static void foreach_process(void (*callback)(struct ovo_task_struct *)) {
     struct task_struct *task;
     struct ovo_task_struct ovo_task;
     int ret = 0;

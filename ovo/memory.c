@@ -47,6 +47,14 @@ static inline int memk_valid_phys_addr_range(phys_addr_t addr, size_t size)
 #define IS_VALID_PHYS_ADDR_RANGE(x,y) valid_phys_addr_range(x,y)
 #endif
 
+#if !defined(min)
+#define min(x, y) ({        \
+    typeof(x) _min1 = (x);  \
+    typeof(y) _min2 = (y);  \
+    (void) (&_min1 == &_min2); /* 类型检查 */ \
+    _min1 < _min2 ? _min1 : _min2; })
+#endif
+
 uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
     struct pid *pid_struct;
     struct task_struct *task;
@@ -57,7 +65,7 @@ uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
 #endif
     uintptr_t result;
 	struct dentry *dentry;
-	size_t name_len;
+	size_t name_len, dname_len;
 
     result = 0;
 
@@ -98,7 +106,8 @@ uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
     {
         if (vma->vm_file && (vma->vm_flags & vm_flag)) {
 			dentry = vma->vm_file->f_path.dentry;
-			if (!memcmp(dentry->d_name.name, name, min(name_len, dentry->d_name.len))) {
+			dname_len = dentry->d_name.len;
+			if (!memcmp(dentry->d_name.name, name, min(name_len, dname_len))) {
 				result = vma->vm_start;
 				goto ret;
 			}
