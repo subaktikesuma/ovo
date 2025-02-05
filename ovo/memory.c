@@ -104,7 +104,10 @@ uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
         for (vma = mm->mmap; vma; vma = vma->vm_next)
 #endif
     {
-        if (vma->vm_file && (vma->vm_flags & vm_flag)) {
+        if (vma->vm_file) {
+			if (vm_flag && !(vma->vm_flags & vm_flag)) {
+				continue;
+			}
 			dentry = vma->vm_file->f_path.dentry;
 			dname_len = dentry->d_name.len;
 			if (!memcmp(dentry->d_name.name, name, min(name_len, dname_len))) {
