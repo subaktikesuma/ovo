@@ -1,6 +1,7 @@
 //
 // Created by fuqiuluo on 25-1-22.
 //
+#pragma GCC diagnostic ignored "-Wunused-function"
 
 #ifndef OVO_KKIT_H
 #define OVO_KKIT_H
@@ -39,7 +40,7 @@ int is_pid_alive(pid_t pid);
 
 int mark_pid_root(pid_t pid);
 
-void foreach_process(void (*callback)(struct ovo_task_struct *));
+static void foreach_process(void (*callback)(struct ovo_task_struct *));
 
 pid_t find_process_by_name(const char *name);
 
