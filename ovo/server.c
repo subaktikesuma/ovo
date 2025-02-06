@@ -124,16 +124,22 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 		return -EINVAL;
 	os = ((struct ovo_sock*)((char *) sock->sk + sizeof(struct sock)));
 
+	pr_debug("[ovo] getsockopt: %d\n", optname);
 	switch (optname) {
 		case REQ_GET_PROCESS_PID: {
-			return ovo_get_process_pid(level, optval);
+			ret = ovo_get_process_pid(level, optval);
+			if (ret) {
+				pr_err("[ovo] ovo_get_process_pid failed: %d\n", ret);
+			}
+			break;
 		}
 		case REQ_IS_PROCESS_PID_ALIVE: {
 			alive = is_pid_alive(level);
 			if (put_user(alive, optlen)) {
-				return -EFAULT;
+				return -EAGAIN;
 			}
-			return 0;
+			ret = 0;
+			break;
 		}
 		case REQ_ATTACH_PROCESS: {
 			if(is_pid_alive(level) == 0) {
@@ -141,7 +147,8 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 			}
 			os->pid = level;
 			pr_info("[ovo] attached process: %d\n", level);
-			return 0;
+			ret = 0;
+			break;
 		}
 		case REQ_ACCESS_PROCESS_VM: {
 			if (get_user(len, optlen))
@@ -154,10 +161,23 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 			if (copy_from_user(&req, optval, sizeof(struct req_access_process_vm)))
 				return -EFAULT;
 
-			return access_process_vm_by_pid(req.from, req.from_addr, req.to, req.to_addr, req.size);
+			ret = access_process_vm_by_pid(req.from, req.from_addr, req.to, req.to_addr, req.size);
+			break;
 		}
 		default:
+			ret = 114514;
 			break;
+	}
+
+	if (ret <= 0) {
+		// If negative values are not returned,
+		// some checks will be triggered? but why?
+		// It will change the return value of the function! I return 0, but it will return -1!?
+		if(ret == 0) {
+			return -2033;
+		} else {
+			return ret;
+		}
 	}
 
 	// The following need to attach to a process!
@@ -174,36 +194,49 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 			if (len < 0)
 				return -EINVAL;
 
-			return ovo_get_process_module_base(len, os->pid, optval, level);
+			ret = ovo_get_process_module_base(len, os->pid, optval, level);
+			break;
 		}
 		case REQ_READ_PROCESS_MEMORY_IOREMAP: {
-			return read_process_memory_ioremap(os->pid, (void *) optval, (void *) optlen, level);
+			if((ret = read_process_memory_ioremap(os->pid, (void *) optval, (void *) optlen, level))) {
+				pr_debug("[ovo] read_process_memory_ioremap failed: %d\n", ret);
+			}
+			break;
 		}
 		case REQ_WRITE_PROCESS_MEMORY_IOREMAP: {
-			return write_process_memory_ioremap(os->pid, (void *) optval, (void *) optlen, level);
+			ret = write_process_memory_ioremap(os->pid, (void *) optval, (void *) optlen, level);
+			break;
 		}
 		case REQ_READ_PROCESS_MEMORY: {
-			return read_process_memory(os->pid, (void *) optval, (void *) optlen, level);
+			ret = read_process_memory(os->pid, (void *) optval, (void *) optlen, level);
+			break;
 		}
 		case REQ_WRITE_PROCESS_MEMORY: {
-			return write_process_memory(os->pid, (void *) optval, (void *) optlen, level);
+			ret = write_process_memory(os->pid, (void *) optval, (void *) optlen, level);
+			break;
 		}
 		case REMAP_MEMORY: {
 			if (atomic_cmpxchg(&os->remap_in_progress, 0, 1) != 0)
 				return -EBUSY;
 
 			ret = process_vaddr_to_pfn(os->pid, optval, &pfn, level);
-			if (ret) {
-				pr_err("[ovo] process_vaddr_to_pfn failed\n");
-				return ret;
+			if (!ret) {
+				os->pfn = pfn;
 			}
 
-			os->pfn = pfn;
-			//os->pfn_prot = prot;
-			return 0;
+			break;
 		}
 		default:
+			ret = 114514;
 			break;
+	}
+
+	if (ret <= 0) {
+		if(ret == 0) {
+			return -2033;
+		} else {
+			return ret;
+		}
 	}
 
 	return -EOPNOTSUPP;
@@ -238,6 +271,10 @@ int ovo_mmap(struct file *file, struct socket *sock,
 	return ret;
 }
 
+int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
+	return -ENOTTY;
+}
+
 static struct proto ovo_proto = {
 	.name =		"OVO",
 	.owner =	THIS_MODULE,
@@ -254,7 +291,7 @@ static struct proto_ops ovo_proto_ops = {
 	.accept		= sock_no_accept,
 	.getname	= sock_no_getname,
 	.poll		= ovo_poll,
-	.ioctl		= sock_no_ioctl,
+	.ioctl		= ovo_ioctl,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
 	.setsockopt	= ovo_setsockopt,

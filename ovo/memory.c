@@ -142,10 +142,10 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
 #endif
 
     if (!pte_present(*ptep)) {
+		pr_err("[ovo] pte not present\n");
         return 0;
     }
 
-    // #define __pte_to_phys(pte)	(pte_val(pte) & PTE_ADDR_MASK)
     page_offset = va & (PAGE_SIZE - 1);
 #if defined(__pte_to_phys)
     page_addr = (phys_addr_t) __pte_to_phys(*ptep);
@@ -160,6 +160,7 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
 #endif
 
     if (page_addr == 0) { // why?
+		pr_err("[ovo] page_addr is 0\n");
         return 0;
     }
 
@@ -208,6 +209,11 @@ int read_process_memory_ioremap(pid_t pid, void __user*addr, void __user*dest, s
     int ret;
     void* mapped;
 
+	if (!addr) {
+		pr_err("[ovo] addr is null: %s\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!access_ok(dest, size)) {
 		pr_err("[ovo] access_ok failed: %s\n", __func__);
 		return -EACCES;
@@ -219,7 +225,17 @@ int read_process_memory_ioremap(pid_t pid, void __user*addr, void __user*dest, s
 		return ret;
 	}
 
-    if (phy_addr && pfn_valid(__phys_to_pfn(phy_addr)) && IS_VALID_PHYS_ADDR_RANGE(phy_addr, size)){
+	if (!pfn_valid(__phys_to_pfn(phy_addr))) {
+		pr_err("[ovo] pfn_valid failed: %s\n", __func__);
+		return -EFAULT;
+	}
+
+	if (!IS_VALID_PHYS_ADDR_RANGE(phy_addr, size)) {
+		pr_err("[ovo] IS_VALID_PHYS_ADDR_RANGE failed: %s, ptr = %p, size = %zu\n", __func__, (void *)phy_addr, size);
+		return -EFAULT;
+	}
+
+    if (phy_addr){
         mapped = ioremap_cache(phy_addr, size);
 		if (!mapped) {
 			ret = -ENOMEM;
@@ -232,9 +248,11 @@ int read_process_memory_ioremap(pid_t pid, void __user*addr, void __user*dest, s
             iounmap(mapped);
         }
     } else {
+		pr_err("[ovo] phy_addr is 0, %p, %s\n", (void *)phy_addr, __func__);
 		ret = -EFAULT;
 	}
 
+	//pr_info("[ovo] read_process_memory_ioremap: %s, ret = %d\n", __func__, ret);
     return ret;
 }
 
@@ -242,6 +260,11 @@ int write_process_memory_ioremap(pid_t pid, void __user*addr, void __user*src, s
     phys_addr_t pa;
     int ret;
     void* mapped;
+
+	if (!addr) {
+		pr_err("[ovo] addr is null: %s\n", __func__);
+		return -EINVAL;
+	}
 
 	if (!access_ok(src, size)) {
 		return -EACCES;
@@ -335,7 +358,13 @@ int read_process_memory(pid_t pid, void *addr, void *dest, size_t size) {
 	int ret;
 	void* mapped;
 
+	if (!addr) {
+		pr_err("[ovo] addr is null: %s\n", __func__);
+		return -EINVAL;
+	}
+
 	if (!access_ok(dest, size)) {
+		pr_err("[ovo] access_ok failed: %s\n", __func__);
 		return -EACCES;
 	}
 
@@ -363,6 +392,11 @@ int write_process_memory(pid_t pid, void *addr, void *src, size_t size) {
 	phys_addr_t pa;
 	int ret;
 	void* mapped;
+
+	if (!addr) {
+		pr_err("[ovo] addr is null: %s\n", __func__);
+		return -EINVAL;
+	}
 
 	if (!access_ok(src, size)) {
 		return -EACCES;
