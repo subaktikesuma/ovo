@@ -124,6 +124,11 @@ uintptr_t get_module_base(pid_t pid, char *name, int vm_flag) {
     return result;
 }
 
+uintptr_t get_module_base_bss(pid_t pid, char *name, int vm_flag) {
+	// TODO
+	return 0;
+}
+
 phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
     pte_t *ptep;
     phys_addr_t page_addr;
@@ -140,6 +145,10 @@ phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va) {
 #else
     ptep = page_from_virt_user(mm, va);
 #endif
+	if (!ptep) {
+		pr_err("[ovo] failed to get ptep from 0x%lx\n", va);
+		return 0;
+	}
 
     if (!pte_present(*ptep)) {
 		pr_err("[ovo] pte not present\n");

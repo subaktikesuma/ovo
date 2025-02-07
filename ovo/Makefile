@@ -11,6 +11,7 @@ $(MODULE)-objs += server.o
 EXTRA_CFLAGS += -DHIDE_SELF_MODULE=0	# 是否在模块表中移除自己
 EXTRA_CFLAGS += -DBUILD_REMAP=1	# 是否编译内存重映射API（不稳定）
 EXTRA_CFLAGS += -DINJECT_SYSCALLS=0	# 是否注入SYSCALL开启更多功能
+EXTRA_CFLAGS += -DBIG_PAGE
 
 EXTRA_CFLAGS += -O2                # 优化等级2
 EXTRA_CFLAGS += -fvisibility=hidden  # 隐藏符号

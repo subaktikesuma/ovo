@@ -128,7 +128,7 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
         return NULL;
     }
 
-#if defined(pud_leaf)
+#if defined(pud_leaf) && defined(BIG_PAGE)
     // 处理 PUD 级大页，直接操作 pud_val
     if (pud_leaf(pud)) {
         ptep = (pte_t *) pudp;
@@ -142,7 +142,7 @@ pte_t *page_from_virt_user(struct mm_struct *mm, unsigned long addr) {
         return NULL;
     }
 
-#if defined(pmd_leaf)
+#if defined(pmd_leaf) && defined(BIG_PAGE)
     if (pmd_leaf(pmd)) {
         ptep = (pte_t *) pmdp;
         goto ret;

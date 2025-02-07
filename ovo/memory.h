@@ -10,6 +10,7 @@
 #include <linux/version.h>
 
 uintptr_t get_module_base(pid_t pid, char *name, int vm_flag);
+uintptr_t get_module_base_bss(pid_t pid, char *name, int vm_flag);
 
 phys_addr_t vaddr_to_phy_addr(struct mm_struct *mm, uintptr_t va);
 
