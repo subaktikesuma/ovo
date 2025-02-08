@@ -23,8 +23,8 @@ EXTRA_CFLAGS += -fno-stack-protector
 # ARM架构优化
 EXTRA_CFLAGS += -march=armv8-a     # 适用于ARMv8架构
 EXTRA_CFLAGS += -mtune=cortex-a53  # 针对Cortex-A53优化
-EXTRA_CFLAGS += -mfpu=neon-fp-armv8  # 使用NEON和VFP单元
-EXTRA_CFLAGS += -mfloat-abi=hard   # 硬件浮点
+#EXTRA_CFLAGS += -mfpu=neon-fp-armv8  # 使用NEON和VFP单元
+#EXTRA_CFLAGS += -mfloat-abi=hard   # 硬件浮点
 
 all:
 	make -C $(KDIR) EXTRA_CFLAGS="$(EXTRA_CFLAGS)" M=$(PWD) modules
