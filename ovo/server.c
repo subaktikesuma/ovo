@@ -18,6 +18,7 @@
 #include <net/busy_poll.h>
 #include "kkit.h"
 #include "memory.h"
+#include "touch.h"
 
 static int ovo_release(struct socket *sock) {
 	struct sock *sk = sock->sk;
@@ -272,6 +273,81 @@ int ovo_mmap(struct file *file, struct socket *sock,
 }
 
 int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
+	struct event_pool* pool;
+	unsigned long flags;
+
+	pool = get_event_pool();
+	if (pool == NULL) {
+		return -ECOMM;
+	}
+
+	struct touch_event_base __user* event_user = (struct touch_event_base __user*) arg;
+	struct touch_event_base event;
+
+	if(!event_user) {
+		return -EBADR;
+	}
+
+	if (copy_from_user(&event, event_user, sizeof(struct touch_event_base))) {
+		return -EACCES;
+	}
+
+	if (cmd == CMD_TOUCH_CLICK_DOWN) {
+		spin_lock_irqsave(&pool->event_lock, flags);
+
+		if (pool->size >= MAX_EVENTS) {
+			pr_warn("[ovo] event pool is full!\n");
+			pool->size = 0;
+		}
+
+		input_event_cache(EV_ABS, ABS_MT_SLOT, event.slot, 0);
+		int id = input_mt_report_slot_state_with_id_cache(MT_TOOL_FINGER, 1, event.slot, 0);
+		input_event_cache(EV_ABS, ABS_MT_POSITION_X, event.x, 0);
+		input_event_cache(EV_ABS, ABS_MT_POSITION_Y, event.y, 0);
+		input_event_cache(EV_ABS, ABS_MT_PRESSURE, event.pressure, 0);
+		input_event_cache(EV_ABS, ABS_MT_TOUCH_MAJOR, event.pressure, 0);
+		input_event_cache(EV_ABS, ABS_MT_TOUCH_MINOR, event.pressure, 0);
+
+		event.pressure = id;
+		if (copy_to_user(event_user, &event, sizeof(struct touch_event_base))) {
+			pr_err("[ovo] copy_to_user failed: %s\n", __func__);
+			return -EACCES;
+		}
+
+		spin_unlock_irqrestore(&pool->event_lock, flags);
+		return -2033;
+	}
+	if (cmd == CMD_TOUCH_CLICK_UP) {
+		spin_lock_irqsave(&pool->event_lock, flags);
+
+		if (pool->size >= MAX_EVENTS) {
+			pr_warn("[ovo] event pool is full!\n");
+			pool->size = 0;
+		}
+
+		input_event_cache(EV_ABS, ABS_MT_SLOT, event.slot, 0);
+		input_mt_report_slot_state_cache(MT_TOOL_FINGER, 0, 0);
+
+		spin_unlock_irqrestore(&pool->event_lock, flags);
+		return -2033;
+	}
+	if (cmd == CMD_TOUCH_MOVE) {
+		spin_lock_irqsave(&pool->event_lock, flags);
+
+		if (pool->size >= MAX_EVENTS) {
+			pr_warn("[ovo] event pool is full!\n");
+			pool->size = 0;
+		}
+
+		input_event_cache(EV_ABS, ABS_MT_SLOT, event.slot, 0);
+		input_event_cache(EV_ABS, ABS_MT_POSITION_X, event.x, 0);
+		input_event_cache(EV_ABS, ABS_MT_POSITION_Y, event.y, 0);
+		input_event_cache(EV_SYN, SYN_MT_REPORT, 0, 0);
+
+		spin_unlock_irqrestore(&pool->event_lock, flags);
+		return -2033;
+	}
+
 	return -ENOTTY;
 }
 

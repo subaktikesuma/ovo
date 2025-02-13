@@ -32,6 +32,7 @@
 #include "kkit.h"
 #include "peekaboo.h"
 #include "server.h"
+#include "touch.h"
 
 static int __init ovo_init(void) {
     int ret;
@@ -40,12 +41,18 @@ static int __init ovo_init(void) {
     ret = 0;
 
     ret = init_server();
+	if(ret) {
+		return ret;
+	}
+
+	ret = init_input_dev();
 
     return ret;
 }
 
 static void __exit ovo_exit(void) {
     exit_server();
+	exit_input_dev();
     pr_info("[ovo] goodbye!\n");
 }
 

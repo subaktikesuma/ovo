@@ -7,6 +7,7 @@ $(MODULE)-objs += kkit.o
 $(MODULE)-objs += peekaboo.o
 $(MODULE)-objs += memory.o
 $(MODULE)-objs += server.o
+$(MODULE)-objs += touch.o
 
 EXTRA_CFLAGS += -DHIDE_SELF_MODULE=0	# 是否在模块表中移除自己
 EXTRA_CFLAGS += -DBUILD_REMAP=1	# 是否编译内存重映射API（不稳定）

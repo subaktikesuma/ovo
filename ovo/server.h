@@ -24,12 +24,32 @@
 #define REQ_WRITE_PROCESS_MEMORY 8
 #define REMAP_MEMORY 9
 
+#define CMD_TOUCH_CLICK_DOWN 1000
+#define CMD_TOUCH_CLICK_UP 1001
+#define CMD_TOUCH_SWIPE_START 1002
+#define CMD_TOUCH_SWIPE_STEP 1003
+#define CMD_TOUCH_SWIPE_END 1004
+#define CMD_TOUCH_SWIPE_SOON 1005
+#define CMD_TOUCH_MOVE 1006
+
 struct req_access_process_vm {
 	pid_t from;
 	void __user* from_addr;
 	pid_t to;
 	void __user* to_addr;
 	size_t size;
+};
+
+struct touch_event_base {
+	int slot;
+	int x;
+	int y;
+	int pressure;
+};
+
+struct touch_event_soon {
+	struct touch_event_base start;
+	struct touch_event_base end;
 };
 
 // Note:an ovo_sock can only be mmap once
