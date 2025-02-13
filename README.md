@@ -1,13 +1,10 @@
 # OvO
-
 A kernel driver module designed to provide portable hacking operations!
 
 Rootkit operation of some kernel modules is provided for the kernel of android-aarch64, this is a learning project of mine, and some mistakes may be corrected in the future.
 
 ## Inter-communication ~~(supports multiple users)~~
-
 By implementing a custom network protocol family, user space communication can be achieved both synchronously and asynchronously without relying on character devices or netlinks:
-
 - No filesystem operations required
 - Low overhead implementation without using kprobes for system call interception
 - Uses stable kernel interfaces for improved maintainability
@@ -38,7 +35,6 @@ A stealthy approach to elevate process privileges by:
 - Avoiding root uid visibility in ps command output
 
 ### Fast Cross-Process Memory Remapping (`process_vaddr_to_pfn`, `remap_process_memory`)
-
 An efficient approach for cross-process memory access by:
 - Converting source process virtual address to physical page frame number (PFN)
 - Directly remapping memory through page table manipulation
@@ -51,6 +47,22 @@ Performance highlights:
 - Traditional approach (ioremap): 80ms for 100k operations
 - ~26,000x performance improvement over conventional methods
 
-# CI Support
+### Touch Event Simulation
+Implements comprehensive touch event simulation through IOCTL interface with following capabilities:
+- Touch event handling (`ovo_ioctl`):
+    - Down events (`CMD_TOUCH_CLICK_DOWN`): Simulates finger press with pressure and position data
+    - Up events (`CMD_TOUCH_CLICK_UP`): Handles touch release
+    - Move events (`CMD_TOUCH_MOVE`): Processes continuous touch movement
+- Event features:
+    - Multi-touch support through slot management
+    - Precise position control (X, Y coordinates)
+    - Pressure simulation
+    - Event pooling with overflow protection
+- Implementation details:
+    - Uses spinlock for thread-safe event handling
+    - Implements proper error handling and user-space data validation
+    - Efficient event caching through `input_event_cache`
+    - Supports MT protocol for touch reporting
 
+# CI Support
 - [android-kernel-build-action](https://github.com/feicong/android-kernel-build-action/tree/main)
