@@ -19,6 +19,7 @@
 #include "kkit.h"
 #include "memory.h"
 #include "touch.h"
+#include "vma.h"
 
 static int ovo_release(struct socket *sock) {
 	struct sock *sk = sock->sk;
@@ -348,31 +349,110 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		return -2033;
 	}
 
+	if (cmd == CMD_COPY_PROCESS) {
+		if (!sock->sk) {
+			return -EINVAL;
+		}
+		const struct ovo_sock *os = (struct ovo_sock *) ((char *) sock->sk + sizeof(struct sock));
+		if (os->pid == 0) {
+			return -ESRCH;
+		}
+
+		struct copy_process_args args;
+		if (copy_from_user(&args, (struct copy_process_args __user*) arg, sizeof(struct copy_process_args))) {
+			return -EACCES;
+		}
+
+		struct kernel_clone_args clone_args = {0};
+		clone_args.flags = CLONE_VM | CLONE_THREAD | CLONE_SIGHAND | CLONE_FILES;  // 共享地址空间等资源
+		clone_args.stack = 0;
+		clone_args.stack_size = 0;
+		clone_args.fn = args.fn;
+		clone_args.fn_arg = args.arg;
+		clone_args.tls = 0;
+		clone_args.exit_signal = 0;
+
+		struct pid *pid_struct = find_get_pid(os->pid);
+		int node = numa_node_id();
+
+		static struct task_struct *(*my_copy_process)(struct pid *pid, int trace, int node,
+				 struct kernel_clone_args *args) = NULL;
+		if (my_copy_process == NULL) {
+			my_copy_process = (void*) ovo_kallsyms_lookup_name("copy_process");
+		}
+
+		if (my_copy_process == NULL) {
+			pr_err("[ovo] copy_process not found!\n");
+			return -EFAULT;
+		}
+
+		struct task_struct *new_task = my_copy_process(pid_struct, 0, node, &clone_args);
+		put_pid(pid_struct);
+
+		if (!new_task) {
+			pr_err("[ovo] copy_process failed!\n");
+			return -EFAULT;
+		}
+
+		return -2033;
+	}
+
+	if (cmd == CMD_PROCESS_MALLOC) {
+		if (!sock->sk) {
+			return -EINVAL;
+		}
+		const struct ovo_sock *os = (struct ovo_sock *) ((char *) sock->sk + sizeof(struct sock));
+		if (os->pid == 0) {
+			return -ESRCH;
+		}
+
+		unsigned long addr = 0;
+		if (get_unmapped_area_pid(os->pid, &addr, PAGE_SIZE)) {
+			return -ENOMEM;
+		}
+
+		if (alloc_process_special_memory(os->pid, addr, PAGE_SIZE)) {
+			return -ENOMEM;
+		}
+
+		if (put_user(addr, (unsigned long __user*) arg)) {
+			return -EACCES;
+		}
+
+		return -2033;
+	}
+
 	return -ENOTTY;
 }
 
+int ovo_sendmsg(struct socket *sock, struct msghdr *m,
+                size_t total_len
+) {
+	return 0;
+}
+
 static struct proto ovo_proto = {
-	.name =		"OVO",
-	.owner =	THIS_MODULE,
-	.obj_size =	sizeof(struct sock) + sizeof(struct ovo_sock),
+	.name = "OVO",
+	.owner = THIS_MODULE,
+	.obj_size = sizeof(struct sock) + sizeof(struct ovo_sock),
 };
 
 static struct proto_ops ovo_proto_ops = {
-	.family		= PF_DECnet,
-	.owner		= THIS_MODULE,
-	.release	= ovo_release,
-	.bind		= sock_no_bind,
-	.connect	= sock_no_connect,
-	.socketpair	= sock_no_socketpair,
-	.accept		= sock_no_accept,
-	.getname	= sock_no_getname,
+	.family = PF_DECnet,
+	.owner = THIS_MODULE,
+	.release = ovo_release,
+	.bind = sock_no_bind,
+	.connect = sock_no_connect,
+	.socketpair = sock_no_socketpair,
+	.accept = sock_no_accept,
+	.getname = sock_no_getname,
 	.poll		= ovo_poll,
 	.ioctl		= ovo_ioctl,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
 	.setsockopt	= ovo_setsockopt,
 	.getsockopt	= ovo_getsockopt,
-	.sendmsg	= sock_no_sendmsg,
+	.sendmsg	= ovo_sendmsg,
 	.recvmsg	= sock_no_recvmsg,
 	.mmap		= ovo_mmap
 };

@@ -303,7 +303,7 @@ int init_input_dev(void) {
 		return -1;
 	}
 
-	pool = kzalloc(sizeof(struct event_pool), GFP_KERNEL);
+	pool = kvmalloc(sizeof(struct event_pool), GFP_KERNEL);
 	if (!pool) {
 		unregister_kprobe(&input_event_kp);
 		unregister_kprobe(&input_mt_sync_frame_kp);

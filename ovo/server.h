@@ -26,11 +26,9 @@
 
 #define CMD_TOUCH_CLICK_DOWN 1000
 #define CMD_TOUCH_CLICK_UP 1001
-#define CMD_TOUCH_SWIPE_START 1002
-#define CMD_TOUCH_SWIPE_STEP 1003
-#define CMD_TOUCH_SWIPE_END 1004
-#define CMD_TOUCH_SWIPE_SOON 1005
 #define CMD_TOUCH_MOVE 1006
+#define CMD_COPY_PROCESS 1007
+#define CMD_PROCESS_MALLOC 1008
 
 struct req_access_process_vm {
 	pid_t from;
@@ -47,9 +45,9 @@ struct touch_event_base {
 	int pressure;
 };
 
-struct touch_event_soon {
-	struct touch_event_base start;
-	struct touch_event_base end;
+struct copy_process_args {
+	void* fn;
+	void* arg;
 };
 
 // Note:an ovo_sock can only be mmap once
