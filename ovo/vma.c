@@ -168,11 +168,29 @@ unsigned long unmapped_area_mm(struct mm_struct *mm, size_t length)
 
 	return gap;
 }
-#endif
+#else
+unsigned long unmapped_area_mm(struct mm_struct *mm, size_t len) {
+	unsigned long (*get_area)(struct file *, unsigned long,
+				  unsigned long, unsigned long, unsigned long);
 
-unsigned long unmapped_area_mm(struct mm_struct *mm, size_t length) {
-	return 0;
+	unsigned long addr;
+	/* Careful about overflows.. */
+	if (len > TASK_SIZE)
+		return -ENOMEM;
+
+	get_area = mm->get_unmapped_area;
+	addr = get_area(NULL, 0, len, 0, 0);
+	if (IS_ERR_VALUE(addr))
+		return addr;
+
+	if (addr > TASK_SIZE - len)
+		return -ENOMEM;
+	if (offset_in_page(addr))
+		return -EINVAL;
+
+	return addr;
 }
+#endif
 
 int get_unmapped_area_pid(pid_t pid, unsigned long* addr, size_t size) {
 	struct task_struct *task;
