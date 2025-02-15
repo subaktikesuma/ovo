@@ -432,7 +432,7 @@ int ovo_sendmsg(struct socket *sock, struct msghdr *m,
 }
 
 static struct proto ovo_proto = {
-	.name = "OVO",
+	.name = "NFC_LLCP",
 	.owner = THIS_MODULE,
 	.obj_size = sizeof(struct sock) + sizeof(struct ovo_sock),
 };

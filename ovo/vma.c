@@ -238,6 +238,7 @@ static vm_fault_t ovo_fault(const struct vm_special_mapping *sm,
 				struct vm_area_struct *vma,
 				struct vm_fault *vmf) {
 	pr_err("[ovo] no ovo_fault? OwO\n");
+
 	return VM_FAULT_SIGBUS;
 }
 
@@ -292,7 +293,6 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size) {
 	ret = my_install_special_mapping(mm, addr, size,
 		VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
 		&aarch64_ovo_map);
-	//ret = NULL;
 	MM_READ_UNLOCK(mm)
 	mmput(mm);
 	put_task_struct(task);
