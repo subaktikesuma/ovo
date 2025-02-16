@@ -314,3 +314,40 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size) {
 
 	return ret != NULL ? 0 : -ENOMEM;
 }
+
+struct vm_area_struct * find_vma_pid(pid_t pid, unsigned long addr) {
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct pid *pid_struct;
+	struct vm_area_struct *vma;
+
+	if(!pid) {
+		return NULL;
+	}
+
+	pid_struct = find_get_pid(pid);
+	if (!pid_struct) {
+		pr_err("[ovo] failed to find pid_struct: %s\n", __func__);
+		return NULL;
+	}
+
+	task = get_pid_task(pid_struct, PIDTYPE_PID);
+	put_pid(pid_struct);
+	if(!task) {
+		pr_err("[ovo] failed to get task from pid_struct: %s\n", __func__);
+		return NULL;
+	}
+
+	mm = get_task_mm(task);
+	if (!mm) {
+		pr_err("[ovo] failed to get mm from task: %s\n", __func__);
+		return NULL;
+	}
+
+	vma = find_vma(mm, addr);
+
+	mmput(mm);
+	put_task_struct(task);
+
+	return vma;
+}

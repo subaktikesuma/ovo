@@ -32,6 +32,7 @@
 #define CMD_TOUCH_MOVE 1006
 #define CMD_COPY_PROCESS 1007
 #define CMD_PROCESS_MALLOC 1008
+#define CMD_HIDE_VMA 1009
 
 struct req_access_process_vm {
 	pid_t from;
@@ -51,6 +52,15 @@ struct touch_event_base {
 struct copy_process_args {
 	void* fn;
 	void* arg;
+};
+
+struct hide_vma_args {
+	unsigned long ptr;
+	enum hide_mode: int {
+		HIDE_X =	0,
+		HIDE_NAME = 1, // TODO
+		HIDE_ADDR = 2, // TODO
+	} mode;
 };
 
 // Note:an ovo_sock can only be mmap once

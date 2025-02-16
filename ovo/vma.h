@@ -19,5 +19,6 @@ int remap_process_memory(struct vm_area_struct *vma, unsigned long pfn, size_t s
 
 int get_unmapped_area_pid(pid_t pid, unsigned long* addr, size_t size);
 int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size);
+struct vm_area_struct* find_vma_pid(pid_t pid, unsigned long addr);
 
 #endif //VMA_H

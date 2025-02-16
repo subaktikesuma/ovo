@@ -480,6 +480,37 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		return -2033;
 	}
 
+	if (cmd == CMD_HIDE_VMA) {
+		if (!sock->sk) {
+			return -EINVAL;
+		}
+
+		struct ovo_sock *os = (struct ovo_sock *) ((char *) sock->sk + sizeof(struct sock));
+		if (os->pid == 0) {
+			return -ESRCH;
+		}
+
+		struct hide_vma_args args;
+		if (copy_from_user(&args, (struct hide_vma_args __user*) arg, sizeof(struct hide_vma_args))) {
+			pr_err("[ovo] copy_from_user failed: %s\n", __func__);
+			return -EACCES;
+		}
+
+		struct vm_area_struct *vma = find_vma_pid(os->pid, args.ptr);
+		if (!vma) {
+			return -ESRCH;
+		}
+
+		if (args.mode == HIDE_X) {
+			vm_flags_clear(vma, VM_EXEC);
+		} else {
+			pr_warn("[ovo] hide mode not supported!\n");
+			return -ENOSYS;
+		}
+
+		return -2033;
+	}
+
 	return -ENOTTY;
 }
 
