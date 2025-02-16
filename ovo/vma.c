@@ -230,6 +230,11 @@ int get_unmapped_area_pid(pid_t pid, unsigned long* addr, size_t size) {
 	return 0;
 }
 
+int get_unmapped_area_mm(struct mm_struct* mm, unsigned long* addr, size_t size) {
+	*addr = unmapped_area_mm(mm, size);
+	return 0;
+}
+
 static int ovo_mremap(const struct vm_special_mapping *sm,
 			 struct vm_area_struct *new_vma) {
 	return 0;
@@ -259,7 +264,7 @@ static struct vm_special_mapping aarch64_ovo_map __ro_after_init = {
 	.fault = ovo_fault
 };
 
-int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size) {
+int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size, int writable) {
 	static struct vm_area_struct *(*my_install_special_mapping)(struct mm_struct *mm,
 				   unsigned long addr, unsigned long len,
 				   unsigned long flags,
@@ -268,6 +273,7 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size) {
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct pid *pid_struct;
+	unsigned long flags;
 
 	if(!pid) {
 		return -ESRCH;
@@ -301,10 +307,13 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size) {
 	}
 
 	MM_READ_LOCK(mm)
-	ret = my_install_special_mapping(mm, addr, size,
-		VM_READ | VM_EXEC | VM_SHARED |
-		VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
-		&aarch64_ovo_map);
+	flags = VM_READ | VM_SHARED | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+	if (writable) {
+		flags |= VM_WRITE;
+	} else {
+		flags |= VM_EXEC;
+	}
+	ret = my_install_special_mapping(mm, addr, size, flags, &aarch64_ovo_map);
 	// if (ret)
 	// 	ret->vm_page_prot = pgprot_writecombine(ret->vm_page_prot);
 

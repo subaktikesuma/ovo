@@ -445,7 +445,13 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 			return -ENOMEM;
 		}
 
-		if (alloc_process_special_memory(os->pid, addr, PAGE_SIZE)) {
+		int writable = 0;
+		if (get_user(writable, (int*) arg)) {
+			atomic_set(&os->remap_in_progress, 0);
+			return -EACCES;
+		}
+
+		if (alloc_process_special_memory(os->pid, addr, PAGE_SIZE, writable)) {
 			atomic_set(&os->remap_in_progress, 0);
 			return -ENOMEM;
 		}
