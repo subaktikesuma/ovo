@@ -20,14 +20,25 @@
 #include "memory.h"
 #include "touch.h"
 #include "vma.h"
+#include "addr_pfn_map.h"
 
 static int ovo_release(struct socket *sock) {
 	struct sock *sk = sock->sk;
 
-	if (sk) {
-		sock_orphan(sk);
-		sock_put(sk);
+	if (!sk) {
+		return 0;
 	}
+
+	struct ovo_sock *os = (struct ovo_sock *) ((char *) sock->sk + sizeof(struct sock));
+
+	for (int i = 0; i < os->cached_count; i++) {
+		if (os->cached_kernel_pages[i]) {
+			free_page(os->cached_kernel_pages[i]);
+		}
+	}
+
+	sock_orphan(sk);
+	sock_put(sk);
 
 	//pr_info("[ovo] OVO socket released!\n");
 	return 0;
@@ -224,6 +235,9 @@ static int ovo_getsockopt(struct socket *sock, int level, int optname,
 			ret = process_vaddr_to_pfn(os->pid, optval, &pfn, level);
 			if (!ret) {
 				os->pfn = pfn;
+			} else {
+				atomic_set(&os->remap_in_progress, 0);
+				os->pfn = 0;
 			}
 
 			break;
@@ -268,8 +282,12 @@ int ovo_mmap(struct file *file, struct socket *sock,
 		vm_flags_set(vma, VM_MTE);
 	}
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
+	//vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
 	ret = remap_process_memory(vma, os->pfn, vma->vm_end - vma->vm_start);
+	if (!ret) {
+		pr_err("[ovo] remap_process_memory failed: %d\n", ret);
+	}
 	return ret;
 }
 
@@ -401,23 +419,63 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		if (!sock->sk) {
 			return -EINVAL;
 		}
-		const struct ovo_sock *os = (struct ovo_sock *) ((char *) sock->sk + sizeof(struct sock));
+
+		struct ovo_sock *os = (struct ovo_sock *) ((char *) sock->sk + sizeof(struct sock));
 		if (os->pid == 0) {
 			return -ESRCH;
 		}
 
+		if (os->cached_count >= MAX_CACHE_KERNEL_ADDRESS_COUNT) {
+			pr_err("[ovo] cached_addr_array is full!\n");
+			return -ENOMEM;
+		}
+
+		if (atomic_cmpxchg(&os->remap_in_progress, 0, 1) != 0)
+			return -EBUSY;
+
 		unsigned long addr = 0;
 		if (get_unmapped_area_pid(os->pid, &addr, PAGE_SIZE)) {
+			atomic_set(&os->remap_in_progress, 0);
+			return -ENOMEM;
+		}
+
+		if (addr == 0) {
+			pr_err("[ovo] get_unmapped_area_pid failed: %s\n", __func__);
+			atomic_set(&os->remap_in_progress, 0);
 			return -ENOMEM;
 		}
 
 		if (alloc_process_special_memory(os->pid, addr, PAGE_SIZE)) {
+			atomic_set(&os->remap_in_progress, 0);
 			return -ENOMEM;
 		}
 
-		if (put_user(addr, (unsigned long __user*) arg)) {
+		unsigned long kaddr = get_zeroed_page(GFP_KERNEL);
+		//void *kaddr = kmalloc(PAGE_SIZE, GFP_KERNEL | __GFP_ZERO | __GFP_COMP);
+		if (!kaddr) {
+			pr_err("[ovo] kmalloc failed!: %s\n", __func__);
+			atomic_set(&os->remap_in_progress, 0);
+			return -ENOMEM;
+		}
+
+		if (put_user(addr, (unsigned long __user*) arg)
+			|| put_user((unsigned long) PAGE_SIZE, (unsigned long __user*) (arg + sizeof(unsigned long)))) {
+			free_page(kaddr);
+			atomic_set(&os->remap_in_progress, 0);
 			return -EACCES;
 		}
+
+		unsigned long pfn = __phys_to_pfn(__virt_to_phys(kaddr));
+		if (insert_addr_pfn(addr, pfn) < 0) {
+			free_page(kaddr);
+			atomic_set(&os->remap_in_progress, 0);
+			return -EEXIST;
+		}
+
+		os->cached_kernel_pages[os->cached_count++] = kaddr;
+		os->pfn = pfn;
+
+		pr_info("[ovo] malloced kernel address: 0x%lx, pfn: 0x%lx, magic: 0x%lx\n", kaddr, pfn, *(unsigned long*) kaddr);
 
 		return -2033;
 	}
@@ -495,8 +553,8 @@ static int ovo_create(struct net *net, struct socket *sock, int protocol,
 	os->pid = 0;
 	os->pfn = 0;
 	atomic_set(&os->remap_in_progress, 0);
+	os->cached_count = 0;
 
-	//pr_info("[ovo] OVO socket created!\n");
 	return 0;
 }
 

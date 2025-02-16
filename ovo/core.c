@@ -33,6 +33,7 @@
 #include "peekaboo.h"
 #include "server.h"
 #include "touch.h"
+#include "addr_pfn_map.h"
 
 static int __init ovo_init(void) {
     int ret;
@@ -47,12 +48,17 @@ static int __init ovo_init(void) {
 
 	ret = init_input_dev();
 
+	if (!ret) {
+		init_addr_pfn_map();
+	}
+
     return ret;
 }
 
 static void __exit ovo_exit(void) {
     exit_server();
 	exit_input_dev();
+	destroy_addr_pfn_map();
     pr_info("[ovo] goodbye!\n");
 }
 

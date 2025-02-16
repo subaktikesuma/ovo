@@ -12,6 +12,7 @@
 #include <asm/page.h>
 #include <linux/vmalloc.h>
 #include <linux/mman.h>
+#include "addr_pfn_map.h"
 
 #if BUILD_REMAP == 1
 static int (*my_remap_pfn_range)(struct vm_area_struct *, unsigned long addr,
@@ -85,7 +86,7 @@ int remap_process_memory(struct vm_area_struct *vma, unsigned long pfn, size_t s
 #endif
 
 	if (!my_remap_pfn_range) {
-		my_remap_pfn_range = (void *) ovo_kallsyms_lookup_name("io_remap_pfn_range");
+		my_remap_pfn_range = (void *) ovo_kallsyms_lookup_name("remap_pfn_range");
 		if (!my_remap_pfn_range) {
 			pr_err("[ovo] failed to find io_remap_pfn_range: %s\n", __func__);
 			return -ENOSYS;
@@ -237,9 +238,19 @@ static int ovo_mremap(const struct vm_special_mapping *sm,
 static vm_fault_t ovo_fault(const struct vm_special_mapping *sm,
 				struct vm_area_struct *vma,
 				struct vm_fault *vmf) {
-	pr_err("[ovo] no ovo_fault? OwO\n");
 
-	return VM_FAULT_SIGBUS;
+	unsigned long pfn;
+
+	pfn = lookup_pfn(vma->vm_start);
+	if (!pfn) {
+		pr_err("[ovo] failed to find pfn: addr = 0x%lx\n", vma->vm_start);
+		return VM_FAULT_SIGBUS;
+	}
+
+	vmf->page = pfn_to_page(pfn);
+	get_page(vmf->page);
+
+	return 0;
 }
 
 static struct vm_special_mapping aarch64_ovo_map __ro_after_init = {
@@ -291,8 +302,12 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size) {
 
 	MM_READ_LOCK(mm)
 	ret = my_install_special_mapping(mm, addr, size,
-		VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
+		VM_READ | VM_EXEC | VM_SHARED |
+		VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
 		&aarch64_ovo_map);
+	// if (ret)
+	// 	ret->vm_page_prot = pgprot_writecombine(ret->vm_page_prot);
+
 	MM_READ_UNLOCK(mm)
 	mmput(mm);
 	put_task_struct(task);

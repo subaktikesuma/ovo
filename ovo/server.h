@@ -12,6 +12,9 @@
 #include <linux/spinlock.h>
 #include <linux/mm.h>
 #include <net/sock.h>
+#include "vma.h"
+
+#define MAX_CACHE_KERNEL_ADDRESS_COUNT 16
 
 #define REQ_GET_PROCESS_PID 0
 #define REQ_IS_PROCESS_PID_ALIVE 1
@@ -56,6 +59,9 @@ struct ovo_sock {
 
 	atomic_t remap_in_progress;
 	unsigned long pfn;
+
+	unsigned long cached_kernel_pages[MAX_CACHE_KERNEL_ADDRESS_COUNT];
+	size_t cached_count;
 };
 
 int init_server(void);
