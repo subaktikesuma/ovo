@@ -425,6 +425,11 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 			return -ESRCH;
 		}
 
+		int writable = 0;
+		if (get_user(writable, (int*) arg)) {
+			return -EACCES;
+		}
+
 		if (os->cached_count >= MAX_CACHE_KERNEL_ADDRESS_COUNT) {
 			pr_err("[ovo] cached_addr_array is full!\n");
 			return -ENOMEM;
@@ -433,31 +438,50 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		if (atomic_cmpxchg(&os->remap_in_progress, 0, 1) != 0)
 			return -EBUSY;
 
-		unsigned long addr = 0;
-		if (get_unmapped_area_pid(os->pid, &addr, PAGE_SIZE)) {
-			atomic_set(&os->remap_in_progress, 0);
-			return -ENOMEM;
+		struct pid *pid_struct = find_get_pid(os->pid);
+		if (!pid_struct) {
+			pr_err("[ovo] failed to find pid_struct: %s\n", __func__);
+			return -ESRCH;
 		}
+
+		struct task_struct *task = get_pid_task(pid_struct, PIDTYPE_PID);
+		put_pid(pid_struct);
+		if(!task) {
+			pr_err("[ovo] failed to get task from pid_struct: %s\n", __func__);
+			return -ESRCH;
+		}
+
+		struct mm_struct *mm = get_task_mm(task);
+		put_task_struct(task);
+		if (!mm) {
+			pr_err("[ovo] failed to get mm from task: %s\n", __func__);
+			return -ESRCH;
+		}
+
+		MM_READ_LOCK(mm)
+		unsigned long addr = 0;
+		get_unmapped_area_mm(mm, &addr, PAGE_SIZE);
 
 		if (addr == 0) {
-			pr_err("[ovo] get_unmapped_area_pid failed: %s\n", __func__);
+			MM_READ_UNLOCK(mm)
+			mmput(mm);
 			atomic_set(&os->remap_in_progress, 0);
+			pr_err("[ovo] get_unmapped_area_mm failed: %s\n", __func__);
 			return -ENOMEM;
 		}
 
-		int writable = 0;
-		if (get_user(writable, (int*) arg)) {
+		if (alloc_process_special_memory_mm(mm, addr, PAGE_SIZE, writable)) {
+			MM_READ_UNLOCK(mm)
+			mmput(mm);
 			atomic_set(&os->remap_in_progress, 0);
-			return -EACCES;
-		}
-
-		if (alloc_process_special_memory(os->pid, addr, PAGE_SIZE, writable)) {
-			atomic_set(&os->remap_in_progress, 0);
+			pr_err("[ovo] alloc_process_special_memory_mm failed: %s\n", __func__);
 			return -ENOMEM;
 		}
+
+		MM_READ_UNLOCK(mm)
+		mmput(mm);
 
 		unsigned long kaddr = get_zeroed_page(GFP_KERNEL);
-		//void *kaddr = kmalloc(PAGE_SIZE, GFP_KERNEL | __GFP_ZERO | __GFP_COMP);
 		if (!kaddr) {
 			pr_err("[ovo] kmalloc failed!: %s\n", __func__);
 			atomic_set(&os->remap_in_progress, 0);
@@ -482,7 +506,6 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		os->pfn = pfn;
 
 		pr_info("[ovo] malloced kernel address: 0x%lx, pfn: 0x%lx, magic: 0x%lx\n", kaddr, pfn, *(unsigned long*) kaddr);
-
 		return -2033;
 	}
 

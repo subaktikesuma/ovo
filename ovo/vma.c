@@ -216,6 +216,7 @@ int get_unmapped_area_pid(pid_t pid, unsigned long* addr, size_t size) {
 	}
 
 	mm = get_task_mm(task);
+	put_task_struct(task);
 	if (!mm) {
 		pr_err("[ovo] failed to get mm from task: %s\n", __func__);
 		return -ESRCH;
@@ -225,7 +226,6 @@ int get_unmapped_area_pid(pid_t pid, unsigned long* addr, size_t size) {
 	*addr = unmapped_area_mm(mm, size);
 	MM_READ_UNLOCK(mm)
 	mmput(mm);
-	put_task_struct(task);
 
 	return 0;
 }
@@ -265,26 +265,13 @@ static struct vm_special_mapping aarch64_ovo_map __ro_after_init = {
 };
 
 int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size, int writable) {
-	static struct vm_area_struct *(*my_install_special_mapping)(struct mm_struct *mm,
-				   unsigned long addr, unsigned long len,
-				   unsigned long flags,
-				   const struct vm_special_mapping *spec) = NULL;
-	struct vm_area_struct * ret;
+	int ret;
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct pid *pid_struct;
-	unsigned long flags;
 
-	if(!pid) {
-		return -ESRCH;
-	}
-
-	if (my_install_special_mapping == NULL) {
-		my_install_special_mapping = (void*) ovo_kallsyms_lookup_name("_install_special_mapping");
-		if (!my_install_special_mapping) {
-			pr_err("[ovo] failed to find install_special_mapping: %s\n", __func__);
-			return -ENOSYS;
-		}
+	if (!pid || !size || !addr) {
+		return -EINVAL;
 	}
 
 	pid_struct = find_get_pid(pid);
@@ -301,12 +288,40 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size, int
 	}
 
 	mm = get_task_mm(task);
+	put_task_struct(task);
 	if (!mm) {
 		pr_err("[ovo] failed to get mm from task: %s\n", __func__);
 		return -ESRCH;
 	}
 
 	MM_READ_LOCK(mm)
+	ret = alloc_process_special_memory_mm(mm, addr, size, writable);
+	MM_READ_UNLOCK(mm)
+	mmput(mm);
+
+	return ret;
+}
+
+int alloc_process_special_memory_mm(struct mm_struct* mm, unsigned long addr, size_t size, int writable) {
+	static struct vm_area_struct *(*my_install_special_mapping)(struct mm_struct *mm,
+				   unsigned long addr, unsigned long len,
+				   unsigned long flags,
+				   const struct vm_special_mapping *spec) = NULL;
+	unsigned long flags;
+	struct vm_area_struct * ret;
+
+	if (addr & (PAGE_SIZE - 1)) {
+		return -EINVAL;
+	}
+
+	if (my_install_special_mapping == NULL) {
+		my_install_special_mapping = (void*) ovo_kallsyms_lookup_name("_install_special_mapping");
+		if (!my_install_special_mapping) {
+			pr_err("[ovo] failed to find install_special_mapping: %s\n", __func__);
+			return -ENOSYS;
+		}
+	}
+
 	flags = VM_READ | VM_SHARED | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 	if (writable) {
 		flags |= VM_WRITE;
@@ -314,12 +329,6 @@ int alloc_process_special_memory(pid_t pid, unsigned long addr, size_t size, int
 		flags |= VM_EXEC;
 	}
 	ret = my_install_special_mapping(mm, addr, size, flags, &aarch64_ovo_map);
-	// if (ret)
-	// 	ret->vm_page_prot = pgprot_writecombine(ret->vm_page_prot);
-
-	MM_READ_UNLOCK(mm)
-	mmput(mm);
-	put_task_struct(task);
 
 	return ret != NULL ? 0 : -ENOMEM;
 }
