@@ -1,7 +1,10 @@
 # OvO
+
 A kernel driver module designed to provide portable hacking operations!
 
 Rootkit operation of some kernel modules is provided for the kernel of android-aarch64, this is a learning project of mine, and some mistakes may be corrected in the future.
+
+> QQ交流群：675510232
 
 ## Inter-communication ~~(supports multiple users)~~
 By implementing a custom network protocol family, user space communication can be achieved both synchronously and asynchronously without relying on character devices or netlinks:
