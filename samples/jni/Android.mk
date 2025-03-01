@@ -11,6 +11,5 @@ LOCAL_CPPFLAGS += -fvisibility=hidden
 LOCAL_SRC_FILES := test_memory.cpp
 LOCAL_SRC_FILES += hakutaku.cpp
 
-LOCAL_LDLIBS := -llog -landroid -lEGL -lGLESv3
-LOCAL_CFLAGS := -mllvm -irobf-indbr -mllvm -irobf-icall -mllvm -irobf-indgv -mllvm -irobf-cse -mllvm -irobf-cff
+LOCAL_LDLIBS := -llog -landroid
 include $(BUILD_EXECUTABLE)
