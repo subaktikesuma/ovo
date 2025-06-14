@@ -38,7 +38,7 @@ jobs:
         uses: ./
         with:
           arch: ${{ matrix.arch }}
-          tag: ${{ matrix.tag }}-${{ matrix.patch-level }}
+          tag: ${{ matrix.tag }}
           module-name: ovo
           module-path: ovo
 
