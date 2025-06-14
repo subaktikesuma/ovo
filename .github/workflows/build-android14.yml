@@ -21,7 +21,7 @@ jobs:
             patch-level: 2024-08
             arch: aarch64
           - version: 6.1.75
-            tag: android14-6.1
+            tag: deprecated/android14-6.1
             patch-level: 2024-05
             arch: aarch64
           - version: 6.1.115
