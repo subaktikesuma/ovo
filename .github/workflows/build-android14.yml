@@ -7,7 +7,6 @@ jobs:
   build:
     name: GKI Kernel Module Build
     runs-on: ubuntu-latest
-    needs: upload-artifact
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
@@ -20,7 +19,7 @@ jobs:
             tag: android14-6.1
             patch-level: 2024-06
             arch: aarch64
-          
+
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -33,7 +32,31 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: Checkout Repository
+      - name: Install repo tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip install --upgrade pip
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+          chmod a+x ~/repo
+          sudo mv ~/repo /usr/local/bin/repo
+
+      - name: Initialize and sync kernel repo
+        run: |
+          mkdir kernel && cd kernel
+          repo init -u https://android.googlesource.com/kernel/manifest -b android14-6.1
+          repo sync -j$(nproc) --fetch-submodules
+
+      - name: Verify ABI export file
+        run: |
+          if [ ! -f kernel/common/android/abi_gki_protected_exports_aarch64 ]; then
+            echo "ERROR: Missing ABI export list!"
+            exit 1
+          else
+            echo "ABI export list found."
+          fi
+
+      - name: Checkout this repository (ovo module)
         uses: actions/checkout@v4
 
       - name: Run GKI Kernel Build Action
@@ -43,16 +66,9 @@ jobs:
           tag: ${{ matrix.tag }}-${{ matrix.patch-level }}
           simple-tag: ${{ matrix.tag }}
           version: ${{ matrix.version }}
-          fast_build: false
+          fast_build: true
           module-name: ovo
           module-path: ovo
-
-  upload-artifact:
-    name: Upload LKM Source Code
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
 
       - name: Upload LKM Source Code
         uses: actions/upload-artifact@v4
