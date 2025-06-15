@@ -1,65 +1,64 @@
-name: Android14 Kernel Module Build
+name: Android Kernel Module Build
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    name: GKI Kernel Module Build
     runs-on: ubuntu-latest
     env:
       KERNEL_DIR: android-kernel
-      MODULE_DIR: ovo
-      PREBUILT_KERNEL: https://ci.android.com/builds/latest/branches/aosp_kernel-common-android14-6.1/grid?
-
+      MODULE_NAME: ovo  # Your module name here
+    
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          temp-reserve-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
+    - name: Checkout kernel source
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
+    - name: Set up build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          flex \
+          bison \
+          libssl-dev \
+          libelf-dev \
+          bc \
+          python3 \
+          git \
+          ccache \
+          wget \
+          unzip \
+          curl
 
-      - name: Setup Build Environment
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            flex \
-            bison \
-            libssl-dev \
-            libelf-dev \
-            bc \
-            python3 \
-            git \
-            ccache \
-            wget \
-            unzip
+    - name: Set up module (M-OUT)
+      run: |
+        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M-OUT ${{ env.MODULE_NAME }}
 
-      - name: Download Prebuilt GKI Kernel
-        run: |
-          mkdir -p $KERNEL_DIR
-          wget ${{ env.PREBUILT_KERNEL }} -O kernel.zip
-          unzip kernel.zip -d $KERNEL_DIR
-
-      - name: Build Kernel Module
-        run: |
-          cd $MODULE_DIR
+    - name: Build kernel module
+      run: |
+        # Use prebuilt kernel if available
+        if [ -d "$KERNEL_DIR" ]; then
+          cd ${{ env.MODULE_NAME }}
           make -C $KERNEL_DIR M=$PWD modules
-          ls -lh *.ko
+          
+          # Verify the module was built
+          if [ ! -f *.ko ]; then
+            echo "::error::Module build failed - no .ko file produced"
+            exit 1
+          fi
+        else
+          echo "::error::Kernel directory not found"
+          exit 1
+        fi
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-module
-          path: ${{ env.MODULE_DIR }}/*.ko
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-module
+        path: |
+          ${{ env.MODULE_NAME }}/*.ko
+          ${{ env.KERNEL_DIR }}/arch/arm64/boot/Image.gz-dtb  # If kernel was built
