@@ -8,18 +8,10 @@ jobs:
     name: GKI Kernel Module Build
     runs-on: ubuntu-latest
     env:
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - version: 6.1.75
-            tag: android14-6.1
-            patch-level: 2024-06
-            arch: aarch64
-          
+      KERNEL_DIR: android-kernel
+      MODULE_DIR: ovo
+      PREBUILT_KERNEL: https://ci.android.com/builds/latest/branches/aosp_kernel-common-android14-6.1/grid?
+
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -36,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0  # Important for getting all Git history
+          fetch-depth: 0
 
       - name: Setup Build Environment
         run: |
@@ -51,22 +43,23 @@ jobs:
             python3 \
             git \
             ccache \
-            bazel \
-            bazel-6.4.0
+            wget \
+            unzip
 
-      - name: Prepare ABI Files
+      - name: Download Prebuilt GKI Kernel
         run: |
-          mkdir -p android-kernel/common/android/
-          # Create empty ABI file if missing (may need actual content for production)
-          touch android-kernel/common/android/abi_gki_protected_exports_aarch64
+          mkdir -p $KERNEL_DIR
+          wget ${{ env.PREBUILT_KERNEL }} -O kernel.zip
+          unzip kernel.zip -d $KERNEL_DIR
 
-      - name: Run GKI Kernel Build Action
-        uses: ./
+      - name: Build Kernel Module
+        run: |
+          cd $MODULE_DIR
+          make -C $KERNEL_DIR M=$PWD modules
+          ls -lh *.ko
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          arch: ${{ matrix.arch }}
-          tag: ${{ matrix.tag }}-${{ matrix.patch-level }}
-          simple-tag: ${{ matrix.tag }}
-          version: ${{ matrix.version }}
-          fast_build: true
-          module-name: ovo
-          module-path: ovo
+          name: kernel-module
+          path: ${{ env.MODULE_DIR }}/*.ko
