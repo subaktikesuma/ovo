@@ -35,9 +35,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive  # Important for kernel builds
+          submodules: recursive
+          fetch-depth: 0  # Important for getting all Git history
 
-      - name: Setup build environment
+      - name: Setup Build Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -49,7 +50,15 @@ jobs:
             bc \
             python3 \
             git \
-            ccache
+            ccache \
+            bazel \
+            bazel-6.4.0
+
+      - name: Prepare ABI Files
+        run: |
+          mkdir -p android-kernel/common/android/
+          # Create empty ABI file if missing (may need actual content for production)
+          touch android-kernel/common/android/abi_gki_protected_exports_aarch64
 
       - name: Run GKI Kernel Build Action
         uses: ./
@@ -61,17 +70,3 @@ jobs:
           fast_build: true
           module-name: ovo
           module-path: ovo
-
-  upload-artifact:
-    name: Upload LKM Source Code
-    runs-on: ubuntu-latest
-    needs: build  # Changed to depend on build instead
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Upload LKM Source Code
-        uses: actions/upload-artifact@v4
-        with:
-          name: ovo
-          path: ovo
