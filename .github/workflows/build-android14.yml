@@ -41,11 +41,13 @@ jobs:
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
 
-      - name: Initialize and sync kernel repo
+      - name: Initialize and sync kernel source
         run: |
           mkdir kernel && cd kernel
-          repo init -u https://android.googlesource.com/kernel/manifest -b android14-6.1
-          repo sync -j$(nproc) --fetch-submodules
+          repo init -u https://android.googlesource.com/kernel/manifest -b main
+          repo sync -j$(nproc)
+          cd common
+          git checkout android14-6.1-2024-06
 
       - name: Verify ABI export file
         run: |
