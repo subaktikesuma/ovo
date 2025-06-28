@@ -131,7 +131,6 @@ runs:
       working-directory: android-kernel
       run: |
         repo status
-        rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
         git config --global user.email "bot@github.actions.org"
         git config --global user.name "github.actions"
         cd common/ && git add -A && git commit -a -m "Add Kernel Module"
