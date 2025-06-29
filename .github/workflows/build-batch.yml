@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         tag:
-          - android15-6.6
+          - android14-6.15
         arch:
           - aarch64
           
