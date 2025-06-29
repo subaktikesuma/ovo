@@ -63,7 +63,7 @@ runs:
       run: |
         sudo apt-get install -y repo
         mkdir android-kernel && cd android-kernel
-        repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ inputs.tag }} --repo-rev=v2.16
+        repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ inputs.tag }} --repo-rev=stable
         repo sync -c -j$(nproc) --no-tags
         df -h
 
