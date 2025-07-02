@@ -279,7 +279,11 @@ int ovo_mmap(struct file *file, struct socket *sock,
 	}
 
 	if (system_supports_mte()) {
-		vm_flags_set(vma, VM_MTE);
+		#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+    vm_flags_set(vma, VM_MTE);
+#else
+    vma->vm_flags |= VM_MTE;
+#endif
 	}
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 	//vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
@@ -385,8 +389,13 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		clone_args.flags = CLONE_VM | CLONE_THREAD | CLONE_SIGHAND | CLONE_FILES;  // 共享地址空间等资源
 		clone_args.stack = 0;
 		clone_args.stack_size = 0;
-		clone_args.fn = args.fn;
-		clone_args.fn_arg = args.arg;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,16,0)
+    clone_args.fn = args.fn;
+    clone_args.fn_arg = args.arg;
+#else
+    clone_args.entry = args.fn;
+    clone_args.arg = args.arg;
+#endif
 		clone_args.tls = 0;
 		clone_args.exit_signal = 0;
 
@@ -531,7 +540,11 @@ int ovo_ioctl(struct socket * sock, unsigned int cmd, unsigned long arg) {
 		}
 
 		if (args.mode == HIDE_X) {
-			vm_flags_clear(vma, VM_EXEC);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+    vm_flags_clear(vma, VM_EXEC);
+#else
+    vma->vm_flags &= ~VM_EXEC;    // Clear flag
+#endif
 		} else {
 			pr_warn("[ovo] hide mode not supported!\n");
 			return -ENOSYS;
