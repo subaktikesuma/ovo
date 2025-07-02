@@ -150,7 +150,13 @@ unsigned long unmapped_area_mm(struct mm_struct *mm, size_t length)
 	 * fulill the start gap, the next steps is the minimum to align
 	 * that. It is the minimum needed to fulill both.
 	 */
-	gap = vma_iter_addr(&vmi);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
+    // New iterator API code
+    gap = vmi.addr;
+#else
+    // Old API code
+    gap = vma_iter_addr(&vmi);
+#endif
 	tmp = vma_next(&vmi);
 	if (tmp && (tmp->vm_flags & VM_STARTGAP_FLAGS_BAK)) { /* Avoid prev check if possible */
 		if (vm_start_gap(tmp) < gap + length - 1) {
