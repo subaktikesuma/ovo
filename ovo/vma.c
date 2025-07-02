@@ -134,14 +134,9 @@ unsigned long unmapped_area_mm(struct mm_struct *mm, size_t length)
     unsigned long low_limit, high_limit;
     struct vm_area_struct *tmp;
 
-    // Initialize VMA iterator with version-safe approach
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
+    // Initialize VMA iterator (6.12+ style)
     struct vma_iterator vmi;
     vma_iter_init(&vmi, mm, 0);
-#else
-    struct mm_struct *mm = current->mm;
-    struct vm_area_struct *vma;
-#endif
 
     low_limit = mm->mmap_base;
     if (low_limit < 0)
@@ -149,46 +144,24 @@ unsigned long unmapped_area_mm(struct mm_struct *mm, size_t length)
     high_limit = TASK_SIZE;
 
 retry:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
-    // New API (5.18+)
     if (vma_iter_area_lowest(&vmi, low_limit, high_limit, length))
         return -ENOMEM;
 
-    gap = vmi.addr;
-    tmp = vma_next(&vmi);
-#else
-    // Old API (pre-5.18)
-    vma = find_vma(mm, low_limit);
-    if (!vma)
-        return high_limit - length;
-    
-    gap = low_limit;
-    tmp = vma;
-#endif
+    // Kernel 6.12+ uses vmi.start (NOT vmi.addr)
+    gap = vmi.start;
 
-    /*
-     * Adjust for the gap first so it doesn't interfere with the
-     * later alignment.
-     */
+    tmp = vma_next(&vmi);
     if (tmp && (tmp->vm_flags & VM_STARTGAP_FLAGS_BAK)) {
         if (vm_start_gap(tmp) < gap + length - 1) {
             low_limit = tmp->vm_end;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
             vma_iter_reset(&vmi);
-#endif
             goto retry;
         }
     } else {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
         tmp = vma_prev(&vmi);
-#else
-        tmp = tmp->vm_prev;
-#endif
         if (tmp && vm_end_gap(tmp) > gap) {
             low_limit = vm_end_gap(tmp);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
             vma_iter_reset(&vmi);
-#endif
             goto retry;
         }
     }
