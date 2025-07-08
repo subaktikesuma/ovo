@@ -148,7 +148,7 @@ retry:
         return -ENOMEM;
 
     // Kernel 6.12+ uses vmi.start (NOT vmi.addr)
-    gap = vmi.start;
+    gap = vmi.addr;
 
     tmp = vma_next(&vmi);
     if (tmp && (tmp->vm_flags & VM_STARTGAP_FLAGS_BAK)) {
